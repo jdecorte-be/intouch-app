@@ -1,50 +1,49 @@
-# Welcome to your Expo app 👋
+# ReTalk App 📍
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Native mobile version of the [ReTalk](../ReTalk) web app — discover local events and groups around Toronto, join their chats, and host your own activities. The app uses a feed-style Home screen, a map-first Explore screen with a draggable event sheet, a floating bottom nav, and the ReTalk ink/coral/teal palette.
 
-## Get started
+## Stack
 
-1. Install dependencies
+- **Expo SDK 54** + **expo-router v6** (typed routes)
+- **Tamagui** for the design system (custom ReTalk theme in `tamagui.config.ts`)
+- **Iconsax icons** via `iconsax-react-native` and the typed wrapper in `components/icons/iconly-icon.tsx`
+- **Zustand** stores (`stores/`) persisted with **MMKV** (`lib/storage.ts`, falls back to in-memory storage in Expo Go/web)
+- **Mapbox GL** inside `react-native-webview` for the Explore map (falls back to a stylized board until a Mapbox public token is set)
 
-   ```bash
-   npm install
-   ```
+## Structure
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```
+app/                 expo-router routes
+  (tabs)/            Home, Explore (map), Chats, Profile
+  event/[id].tsx     event / group detail
+  chat/[id].tsx      conversation
+  host.tsx           host-an-activity modal
+  filters.tsx        distance / price / size / date filters modal
+components/          UI building blocks (events, home, nav, icons, ui)
+stores/              zustand stores: events, chats, session
+lib/                 types, utils, palette, MMKV storage, mock data
+lib/api.ts           ⬅ single seam for the future PostgreSQL backend
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Running it
 
-## Learn more
+MMKV and Mapbox are native modules, so use a development build (not Expo Go):
 
-To learn more about developing your project with Expo, look at the following resources:
+```bash
+npm install
+npx expo run:android   # or: npx expo run:ios
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### Mapbox maps
 
-## Join the community
+Set a Mapbox public access token before starting the app:
 
-Join our community of developers creating universal apps.
+```bash
+EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN=pk.your-mapbox-public-token
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Until then the Explore screen renders a fallback event board instead of the live map.
+
+## PostgreSQL later
+
+Live event and auth data come from the configured backend. If events cannot be loaded, Home falls back to `lib/mock-data.ts` so the app remains usable during local development or backend outages.

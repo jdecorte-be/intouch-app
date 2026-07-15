@@ -1,112 +1,144 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useMemo, useState } from 'react';
+import { Pressable, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Text, View, XStack, YStack } from 'tamagui';
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+import { CategoryChips } from '@/components/events/category-chips';
+import { EventListPanel } from '@/components/events/event-list-panel';
+import { EventSheet } from '@/components/home/event-sheet';
+import { GreetingHeader } from '@/components/home/greeting-header';
+import { MapboxEventMap } from '@/components/home/mapbox-event-map';
+import { IconlyIcon } from '@/components/icons/iconly-icon';
+import { palette } from '@/lib/palette';
+import { selectVisibleEvents, useEventsStore } from '@/stores/events-store';
 
-export default function TabTwoScreen() {
+const NAV_CLEARANCE = 80;
+
+export default function ExploreScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+
+  const eventsState = useEventsStore();
+  const visibleEvents = useMemo(
+    () => selectVisibleEvents(eventsState),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      eventsState.events,
+      eventsState.activityScope,
+      eventsState.activeCategory,
+      eventsState.selectedDayKey,
+      eventsState.maxDistanceKm,
+      eventsState.maxPriceCad,
+      eventsState.maxGroupSize,
+      eventsState.happeningNowOnly,
+    ],
+  );
+
+  const navBottom = insets.bottom + NAV_CLEARANCE;
+  const sheetHeight = Math.min(windowHeight * 0.7, 620);
+
+  const openEvent = (eventId: string) => {
+    router.push(`/event/${eventId}`);
+  };
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
+    <View flex={1} backgroundColor={palette.mapWater}>
+      <MapboxEventMap events={visibleEvents} onSelectEvent={openEvent} />
+
+      <YStack
+        position="absolute"
+        top={insets.top + 8}
+        left={0}
+        right={0}
+        gap={10}
+        pointerEvents="box-none"
+      >
+        <View paddingHorizontal={12}>
+          <GreetingHeader onAvatarPress={() => router.navigate('/profile')} />
+        </View>
+        <CategoryChips
+          activeCategory={eventsState.activeCategory}
+          onCategoryChange={eventsState.setActiveCategory}
+          onMap
         />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
+      </YStack>
+
+      {!isSheetOpen ? (
+        <View
+          position="absolute"
+          bottom={navBottom - 8}
+          left={0}
+          right={0}
+          alignItems="center"
+          pointerEvents="box-none"
+        >
+          <Pressable onPress={() => setIsSheetOpen(true)}>
+            <XStack
+              height={44}
+              alignItems="center"
+              gap={8}
+              borderRadius={999}
+              borderWidth={1}
+              borderColor="rgba(41,47,54,0.1)"
+              backgroundColor="rgba(255,255,255,0.96)"
+              paddingHorizontal={16}
+              shadowColor="#0f172a"
+              shadowOpacity={0.09}
+              shadowRadius={14}
+              shadowOffset={{ width: 0, height: 10 }}
+              elevation={6}
+            >
+              <IconlyIcon name="Menu" size={16} />
+              <Text fontSize={14} fontWeight="700" color={palette.ink}>
+                List
+              </Text>
+              <View borderRadius={999} backgroundColor={palette.fog} paddingHorizontal={6} paddingVertical={2}>
+                <Text fontSize={10} color={palette.slate} fontWeight="700">
+                  {visibleEvents.length}
+                </Text>
+              </View>
+            </XStack>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {!isSheetOpen ? (
+        <View position="absolute" bottom={navBottom + 16} right={16} pointerEvents="box-none">
+          <Pressable onPress={() => router.push('/host')}>
+            <View
+              width={60}
+              height={60}
+              borderRadius={30}
+              backgroundColor={palette.ink}
+              alignItems="center"
+              justifyContent="center"
+              shadowColor="#0f172a"
+              shadowOpacity={0.12}
+              shadowRadius={15}
+              shadowOffset={{ width: 0, height: 12 }}
+              style={{ elevation: 8 }}
+            >
+              <IconlyIcon name="Plus" size={26} color="white" />
+            </View>
+          </Pressable>
+        </View>
+      ) : null}
+
+      <EventSheet
+        isOpen={isSheetOpen}
+        height={sheetHeight}
+        bottomOffset={navBottom}
+        onClose={() => setIsSheetOpen(false)}
+      >
+        <EventListPanel
+          onSelectEvent={openEvent}
+          onOpenFilters={() => router.push('/filters')}
+          onAvatarPress={() => router.navigate('/profile')}
         />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+      </EventSheet>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
-  },
-  titleContainer: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-});
