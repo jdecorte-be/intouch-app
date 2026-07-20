@@ -165,16 +165,18 @@ export function EventListPanel({
           </View>
           <Pressable onPress={onOpenFilters}>
             <View
-              width={44}
-              height={44}
-              borderRadius={22}
+              width={40}
+              height={40}
+              borderRadius={20}
               backgroundColor="white"
               borderWidth={1}
               borderColor="rgba(41,47,54,0.1)"
               alignItems="center"
               justifyContent="center"
             >
-              <IconlyIcon name="Filter" size={18} color={palette.inkSoft} />
+              <View transform={[{ translateX: -2 }]}>
+                <IconlyIcon name="Filter" size={18} color={palette.primary} />
+              </View>
             </View>
           </Pressable>
         </XStack>

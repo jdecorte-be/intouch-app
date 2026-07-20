@@ -119,12 +119,12 @@ export default function EventDetailScreen() {
 
   if (!event) {
     return (
-      <YStack flex={1} alignItems="center" justifyContent="center" gap={12} backgroundColor="#050505">
-        <Text fontSize={16} fontWeight="700" color="white">
+      <YStack flex={1} alignItems="center" justifyContent="center" gap={12} backgroundColor={palette.white}>
+        <Text fontSize={16} fontWeight="700" color={palette.ink}>
           This activity is gone.
         </Text>
         <Pressable onPress={() => router.back()}>
-          <Text fontSize={14} fontWeight="700" color="rgba(255,255,255,0.66)">
+          <Text fontSize={14} fontWeight="700" color={palette.gray}>
             Go back
           </Text>
         </Pressable>
@@ -191,7 +191,7 @@ export default function EventDetailScreen() {
   ];
 
   return (
-    <View flex={1} backgroundColor="#050505">
+    <View flex={1} backgroundColor={palette.white}>
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 116 }}
@@ -207,7 +207,7 @@ export default function EventDetailScreen() {
 
           <LinearGradient
             pointerEvents="none"
-            colors={['rgba(0,0,0,0.08)', 'rgba(0,0,0,0.48)', '#050505']}
+            colors={['rgba(0,0,0,0.08)', 'rgba(0,0,0,0.48)', 'rgba(0,0,0,0.78)']}
             locations={[0, 0.48, 1]}
             style={{ position: 'absolute', inset: 0 }}
           />
@@ -319,11 +319,11 @@ export default function EventDetailScreen() {
 
         <YStack paddingHorizontal={18} gap={20} paddingTop={2}>
           <XStack alignItems="center" gap={8}>
-            <View flex={1} height={1} backgroundColor="rgba(255,255,255,0.18)" />
-            <Text fontSize={10} color="rgba(255,255,255,0.68)" fontWeight="700">
+            <View flex={1} height={1} backgroundColor={palette.line} />
+            <Text fontSize={10} color={palette.muted} fontWeight="700">
               {displayTime}
             </Text>
-            <View flex={1} height={1} backgroundColor="rgba(255,255,255,0.18)" />
+            <View flex={1} height={1} backgroundColor={palette.line} />
           </XStack>
 
           <YStack borderRadius={8} backgroundColor="white" padding={14} gap={10}>
@@ -343,16 +343,16 @@ export default function EventDetailScreen() {
           </YStack>
 
           <YStack gap={12}>
-            <Text color="white" fontSize={14} fontWeight="900">
+            <Text color={palette.ink} fontSize={14} fontWeight="900">
               About
             </Text>
-            <Text color="rgba(255,255,255,0.72)" fontSize={13} lineHeight={21}>
+            <Text color={palette.gray} fontSize={13} lineHeight={21}>
               {event.description}
             </Text>
           </YStack>
 
           <YStack gap={10}>
-            <Text color="white" fontSize={14} fontWeight="900">
+            <Text color={palette.ink} fontSize={14} fontWeight="900">
               Details
             </Text>
             <XStack flexWrap="wrap" gap={8}>
@@ -361,12 +361,12 @@ export default function EventDetailScreen() {
                   key={topic}
                   borderRadius={999}
                   borderWidth={1}
-                  borderColor="rgba(255,255,255,0.16)"
-                  backgroundColor="rgba(255,255,255,0.08)"
+                  borderColor={palette.line}
+                  backgroundColor={palette.white}
                   paddingHorizontal={10}
                   paddingVertical={6}
                 >
-                  <Text color="rgba(255,255,255,0.8)" fontSize={11} fontWeight="800">
+                  <Text color={palette.inkSoft} fontSize={11} fontWeight="800">
                     {topic}
                   </Text>
                 </View>
@@ -376,10 +376,10 @@ export default function EventDetailScreen() {
 
           <YStack gap={12}>
             <XStack alignItems="center" justifyContent="space-between">
-              <Text color="white" fontSize={14} fontWeight="900">
+              <Text color={palette.ink} fontSize={14} fontWeight="900">
                 {isGroup ? 'Members' : "Who's going"}
               </Text>
-              <Text color="rgba(255,255,255,0.54)" fontSize={11} fontWeight="800">
+              <Text color={palette.muted} fontSize={11} fontWeight="800">
                 {interest.going} total
               </Text>
             </XStack>
@@ -390,12 +390,12 @@ export default function EventDetailScreen() {
                     label={attendee.name}
                     image={attendee.image}
                     size={40}
-                    borderColor="rgba(255,255,255,0.16)"
+                    borderColor={palette.line}
                     borderWidth={1}
                   />
                   <YStack flex={1} minWidth={0}>
                     <XStack alignItems="center" gap={6}>
-                      <Text fontSize={13} fontWeight="800" color="white" numberOfLines={1}>
+                      <Text fontSize={13} fontWeight="800" color={palette.ink} numberOfLines={1}>
                         {attendee.name}
                       </Text>
                       {attendee.isHost ? (
@@ -406,7 +406,7 @@ export default function EventDetailScreen() {
                         </View>
                       ) : null}
                     </XStack>
-                    <Text fontSize={11} fontWeight="600" color="rgba(255,255,255,0.54)" numberOfLines={1}>
+                    <Text fontSize={11} fontWeight="600" color={palette.muted} numberOfLines={1}>
                       {attendee.role}
                     </Text>
                   </YStack>
@@ -416,11 +416,11 @@ export default function EventDetailScreen() {
                         width={36}
                         height={36}
                         borderRadius={18}
-                        backgroundColor="rgba(255,255,255,0.1)"
+                        backgroundColor={palette.fog}
                         alignItems="center"
                         justifyContent="center"
                       >
-                        <IconlyIcon name="MessageCircleDots" size={15} color="white" />
+                        <IconlyIcon name="MessageCircleDots" size={15} color={palette.ink} />
                       </View>
                     </Pressable>
                   ) : null}
@@ -438,7 +438,7 @@ export default function EventDetailScreen() {
         bottom={0}
         alignItems="center"
         gap={12}
-        backgroundColor="#050505"
+        backgroundColor={palette.white}
         paddingHorizontal={18}
         paddingTop={12}
         paddingBottom={insets.bottom + 12}
@@ -454,11 +454,11 @@ export default function EventDetailScreen() {
             width={44}
             height={44}
             borderRadius={22}
-            backgroundColor="rgba(255,255,255,0.12)"
+            backgroundColor={palette.fog}
             alignItems="center"
             justifyContent="center"
           >
-            <IconlyIcon name="Calendar" size={18} color="white" />
+            <IconlyIcon name="Calendar" size={18} color={palette.ink} />
           </View>
         </Pressable>
         <Pressable onPress={openChat} style={{ flex: 1 }}>

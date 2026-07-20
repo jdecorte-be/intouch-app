@@ -1,6 +1,6 @@
 import { formatChatTimestamp } from './date-utils';
-import { mockChatThreads } from './mock-data';
-import type { ChatMessage, ChatThread, EventItem, HostableCategory, SessionUser } from './types';
+import { mockChatThreads, mockNotifications } from './mock-data';
+import type { ChatMessage, ChatThread, EventItem, HostableCategory, NotificationItem, SessionUser } from './types';
 
 // Single seam between the UI and the data source. Events/groups and auth come
 // from the retalk.live Next.js backend; everything else still serves mock
@@ -9,7 +9,7 @@ import type { ChatMessage, ChatThread, EventItem, HostableCategory, SessionUser 
 
 const NETWORK_DELAY_MS = 250;
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://retalk.live';
-export const GOOGLE_SIGN_IN_URL = `${API_BASE_URL}/api/auth/mobile-google`;
+export const GOOGLE_SIGN_IN_URL = `${API_BASE_URL}/api/mobile/auth/google`;
 
 function delay<T>(value: T): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), NETWORK_DELAY_MS));
@@ -78,7 +78,7 @@ async function parseAuthResponse(response: Response): Promise<{ token: string; u
 }
 
 export async function signInWithCredentials(email: string, password: string) {
-  const response = await fetch(`${API_BASE_URL}/api/auth/mobile-login`, {
+  const response = await fetch(`${API_BASE_URL}/api/mobile/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
@@ -88,7 +88,7 @@ export async function signInWithCredentials(email: string, password: string) {
 }
 
 export async function registerWithCredentials(name: string, email: string, password: string) {
-  const response = await fetch(`${API_BASE_URL}/api/auth/mobile-register`, {
+  const response = await fetch(`${API_BASE_URL}/api/mobile/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, email, password }),
@@ -116,7 +116,7 @@ export async function fetchSession(token: string | null): Promise<SessionUser | 
     return null;
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/auth/mobile-session`, {
+  const response = await fetch(`${API_BASE_URL}/api/mobile/auth/session`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
@@ -133,8 +133,36 @@ export async function fetchSession(token: string | null): Promise<SessionUser | 
   return body.user ? toSessionUser(body.user) : null;
 }
 
+export type MobileMe = {
+  hostedEvents: EventItem[];
+  hostedGroups: EventItem[];
+  interestedEvents: EventItem[];
+  interestedGroups: EventItem[];
+};
+
+// Bundles the signed-in user's own hosted events/groups and the ones
+// they've marked interest in, for the profile screen.
+export async function fetchMe(token: string): Promise<MobileMe> {
+  const response = await fetch(`${API_BASE_URL}/api/mobile/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch profile activity: ${response.status}`);
+  }
+
+  const body = await response.json();
+
+  return {
+    hostedEvents: body.hostedEvents ?? [],
+    hostedGroups: body.hostedGroups ?? [],
+    interestedEvents: body.interestedEvents ?? [],
+    interestedGroups: body.interestedGroups ?? [],
+  };
+}
+
 export async function signOutRemote(token: string): Promise<void> {
-  await fetch(`${API_BASE_URL}/api/auth/mobile-logout`, {
+  await fetch(`${API_BASE_URL}/api/mobile/auth/logout`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
   }).catch(() => {});
@@ -142,6 +170,10 @@ export async function signOutRemote(token: string): Promise<void> {
 
 export async function fetchChatThreads(): Promise<ChatThread[]> {
   return delay(mockChatThreads);
+}
+
+export async function fetchNotifications(): Promise<NotificationItem[]> {
+  return delay(mockNotifications);
 }
 
 export async function toggleEventInterest(

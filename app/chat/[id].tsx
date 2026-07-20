@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput } from 'react-native';
@@ -7,6 +8,7 @@ import { Text, View, XStack, YStack } from 'tamagui';
 import { IconlyIcon } from '@/components/icons/iconly-icon';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { palette } from '@/lib/palette';
+import { appTextInputStyle } from '@/lib/typography';
 import { useChatStore } from '@/stores/chat-store';
 import { useSessionStore } from '@/stores/session-store';
 
@@ -36,7 +38,7 @@ export default function ChatConversationScreen() {
 
   if (!thread) {
     return (
-      <YStack flex={1} alignItems="center" justifyContent="center" gap={12} backgroundColor={palette.mist}>
+      <YStack flex={1} alignItems="center" justifyContent="center" gap={12} backgroundColor={palette.white}>
         <Text fontSize={16} fontWeight="700" color={palette.ink}>
           Chat not found.
         </Text>
@@ -65,7 +67,7 @@ export default function ChatConversationScreen() {
       style={{ flex: 1 }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View flex={1} backgroundColor={palette.mist}>
+      <View flex={1} backgroundColor={palette.white}>
         {/* Header */}
         <XStack
           alignItems="center"
@@ -90,9 +92,17 @@ export default function ChatConversationScreen() {
             alignItems="center"
             justifyContent="center"
           >
-            <Text color="white" fontWeight="700" fontSize={12}>
-              {thread.initials}
-            </Text>
+            {thread.avatarImage ? (
+              <Image
+                source={thread.avatarImage}
+                style={{ width: 40, height: 40, borderRadius: 12 }}
+                contentFit="cover"
+              />
+            ) : (
+              <Text color="white" fontWeight="700" fontSize={12}>
+                {thread.initials}
+              </Text>
+            )}
           </View>
           <YStack flex={1} minWidth={0}>
             <Text fontSize={15} fontWeight="700" color={palette.ink} numberOfLines={1}>
@@ -183,7 +193,7 @@ export default function ChatConversationScreen() {
               onChangeText={setDraft}
               placeholder="Write a message"
               placeholderTextColor={palette.muted}
-              style={{ fontSize: 14, fontWeight: '500', color: palette.ink, paddingVertical: 0 }}
+              style={[appTextInputStyle, { fontSize: 14, fontWeight: '500', color: palette.ink, paddingVertical: 0 }]}
               onSubmitEditing={submit}
               returnKeyType="send"
             />

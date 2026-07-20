@@ -13,6 +13,7 @@ import { palette } from '@/lib/palette';
 import { canUseNativeModules } from '@/lib/runtime';
 import { useChatStore } from '@/stores/chat-store';
 import { useEventsStore } from '@/stores/events-store';
+import { useNotificationsStore } from '@/stores/notifications-store';
 import { useSessionStore } from '@/stores/session-store';
 import { tamaguiConfig } from '@/tamagui.config';
 
@@ -33,7 +34,7 @@ const navigationTheme = {
   ...DefaultTheme,
   colors: {
     ...DefaultTheme.colors,
-    background: palette.mist,
+    background: palette.white,
     card: palette.white,
     text: palette.ink,
     primary: palette.primary,
@@ -49,6 +50,7 @@ export default function RootLayout() {
   const loadEvents = useEventsStore((state) => state.loadEvents);
   const loadSession = useSessionStore((state) => state.loadSession);
   const loadThreads = useChatStore((state) => state.loadThreads);
+  const loadNotifications = useNotificationsStore((state) => state.loadNotifications);
   const needsOnboarding = shouldShowOnboarding(user, completedOnboardingUserIds);
 
   useEffect(() => {
@@ -56,7 +58,7 @@ export default function RootLayout() {
 
     async function loadAppData() {
       try {
-        await Promise.all([loadSession(), loadEvents(), loadThreads()]);
+        await Promise.all([loadSession(), loadEvents(), loadThreads(), loadNotifications()]);
       } finally {
         if (isMounted) {
           setIsReady(true);
@@ -69,7 +71,7 @@ export default function RootLayout() {
     return () => {
       isMounted = false;
     };
-  }, [loadEvents, loadSession, loadThreads]);
+  }, [loadEvents, loadNotifications, loadSession, loadThreads]);
 
   useEffect(() => {
     if (isReady) {
@@ -94,7 +96,7 @@ export default function RootLayout() {
             screenOptions={{
               headerShown: false,
               animation: 'fade',
-              contentStyle: { backgroundColor: palette.mist },
+              contentStyle: { backgroundColor: palette.white },
             }}
           >
             <Stack.Protected guard={!!user && needsOnboarding}>
@@ -103,7 +105,7 @@ export default function RootLayout() {
             <Stack.Protected guard={!!user && !needsOnboarding}>
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="event/[id]" />
-              <Stack.Screen name="chat/[id]" />
+              <Stack.Screen name="chat/[id]" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="host" options={{ presentation: 'modal' }} />
               <Stack.Screen name="filters" options={{ presentation: 'modal' }} />
             </Stack.Protected>

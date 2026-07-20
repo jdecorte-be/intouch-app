@@ -4,7 +4,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import * as api from '@/lib/api';
 import type { OnboardingProfileChanges } from '@/lib/onboarding';
 import { zustandStorage } from '@/lib/storage';
-import type { SessionUser } from '@/lib/types';
+import type { EventItem, SessionUser } from '@/lib/types';
 
 type ProfileOverrides = Record<string, Partial<SessionUser>>;
 
@@ -14,6 +14,10 @@ type SessionState = {
   isLoading: boolean;
   completedOnboardingUserIds: string[];
   profileOverrides: ProfileOverrides;
+  hostedEvents: EventItem[];
+  hostedGroups: EventItem[];
+  interestedEvents: EventItem[];
+  interestedGroups: EventItem[];
   loadSession: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   testSignIn: () => void;
@@ -21,6 +25,7 @@ type SessionState = {
   completeGoogleAuth: (token: string) => Promise<void>;
   completeOnboarding: (changes: OnboardingProfileChanges) => void;
   updateProfile: (changes: Partial<SessionUser>) => void;
+  refreshMyActivity: () => Promise<void>;
   signOut: () => void;
 };
 
@@ -51,6 +56,10 @@ export const useSessionStore = create<SessionState>()(
       isLoading: false,
       completedOnboardingUserIds: [],
       profileOverrides: {},
+      hostedEvents: [],
+      hostedGroups: [],
+      interestedEvents: [],
+      interestedGroups: [],
 
       loadSession: async () => {
         if (get().isLoading) {
@@ -76,6 +85,7 @@ export const useSessionStore = create<SessionState>()(
               }
             })
             .catch(() => {});
+          void get().refreshMyActivity();
 
           return;
         }
@@ -89,6 +99,7 @@ export const useSessionStore = create<SessionState>()(
             token: freshUser ? token : null,
             isLoading: false,
           });
+          void get().refreshMyActivity();
         } catch {
           set({ isLoading: false });
         }
@@ -97,6 +108,7 @@ export const useSessionStore = create<SessionState>()(
       signIn: async (email, password) => {
         const { token, user } = await api.signInWithCredentials(email, password);
         set({ token, user: applyProfileOverrides(user, get().profileOverrides) });
+        void get().refreshMyActivity();
       },
 
       testSignIn: () => {
@@ -106,17 +118,23 @@ export const useSessionStore = create<SessionState>()(
           completedOnboardingUserIds: get().completedOnboardingUserIds.includes(testUser.id)
             ? get().completedOnboardingUserIds
             : [...get().completedOnboardingUserIds, testUser.id],
+          hostedEvents: [],
+          hostedGroups: [],
+          interestedEvents: [],
+          interestedGroups: [],
         });
       },
 
       register: async (name, email, password) => {
         const { token, user } = await api.registerWithCredentials(name, email, password);
         set({ token, user: applyProfileOverrides(user, get().profileOverrides) });
+        void get().refreshMyActivity();
       },
 
       completeGoogleAuth: async (token) => {
         const { token: sessionToken, user } = await api.completeGoogleSignIn(token);
         set({ token: sessionToken, user: applyProfileOverrides(user, get().profileOverrides) });
+        void get().refreshMyActivity();
       },
 
       completeOnboarding: (changes) => {
@@ -153,6 +171,22 @@ export const useSessionStore = create<SessionState>()(
         });
       },
 
+      refreshMyActivity: async () => {
+        const token = get().token;
+
+        if (!token) {
+          return;
+        }
+
+        try {
+          const activity = await api.fetchMe(token);
+          set(activity);
+        } catch {
+          // Keep whatever activity data is already cached; the profile
+          // screen just won't reflect the latest hosted/interested lists.
+        }
+      },
+
       signOut: () => {
         const token = get().token;
 
@@ -160,7 +194,14 @@ export const useSessionStore = create<SessionState>()(
           void api.signOutRemote(token);
         }
 
-        set({ user: null, token: null });
+        set({
+          user: null,
+          token: null,
+          hostedEvents: [],
+          hostedGroups: [],
+          interestedEvents: [],
+          interestedGroups: [],
+        });
       },
     }),
     {

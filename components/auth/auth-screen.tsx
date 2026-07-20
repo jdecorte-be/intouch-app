@@ -19,6 +19,7 @@ import { IconlyIcon } from '@/components/icons/iconly-icon';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { AuthApiError, GOOGLE_SIGN_IN_URL } from '@/lib/api';
 import { palette } from '@/lib/palette';
+import { appTextInputStyle } from '@/lib/typography';
 import { useSessionStore } from '@/stores/session-store';
 
 const GOOGLE_AUTH_REDIRECT_URL = 'retalkapp://auth-callback';
@@ -620,11 +621,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   input: {
+    ...appTextInputStyle,
     height: 40,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#cfd8d5',
-    backgroundColor: '#fbfefd',
+    backgroundColor: palette.white,
     color: palette.ink,
     fontSize: 16,
     paddingHorizontal: 12,

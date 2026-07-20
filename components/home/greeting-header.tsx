@@ -5,12 +5,20 @@ import { IconlyIcon } from '@/components/icons/iconly-icon';
 import { GuestAvatar, UserAvatar } from '@/components/ui/user-avatar';
 import { getTimeGreeting } from '@/lib/event-utils';
 import { palette } from '@/lib/palette';
+import { selectUnreadNotificationCount, useNotificationsStore } from '@/stores/notifications-store';
 import { useSessionStore } from '@/stores/session-store';
 
-export function GreetingHeader({ onAvatarPress }: { onAvatarPress: () => void }) {
+export function GreetingHeader({
+  onAvatarPress,
+  onNotificationPress,
+}: {
+  onAvatarPress: () => void;
+  onNotificationPress?: () => void;
+}) {
   const user = useSessionStore((state) => state.user);
   const userLabel = user?.name || user?.email || '';
   const firstName = userLabel.split(/[@\s]/)[0] || 'there';
+  const unreadCount = useNotificationsStore(selectUnreadNotificationCount);
 
   return (
     <XStack
@@ -30,7 +38,11 @@ export function GreetingHeader({ onAvatarPress }: { onAvatarPress: () => void })
       elevation={5}
     >
       <Pressable onPress={onAvatarPress}>
-        {user ? <UserAvatar label={userLabel} image={user.image} size={36} /> : <GuestAvatar size={36} />}
+        {user ? (
+          <UserAvatar label={userLabel} image={user.image} size={36} borderWidth={2} borderColor={palette.primary} />
+        ) : (
+          <GuestAvatar size={36} borderWidth={2} borderColor={palette.primary} />
+        )}
       </Pressable>
       <YStack flex={1} minWidth={0}>
         <Text fontSize={11} fontWeight="600" color={palette.muted} numberOfLines={1}>
@@ -40,27 +52,33 @@ export function GreetingHeader({ onAvatarPress }: { onAvatarPress: () => void })
           {getTimeGreeting()}
         </Text>
       </YStack>
-      <View
-        width={36}
-        height={36}
-        borderRadius={18}
-        backgroundColor={palette.fog}
-        alignItems="center"
-        justifyContent="center"
-      >
-        <IconlyIcon name="Bell" size={16} />
+      <Pressable onPress={onNotificationPress} disabled={!onNotificationPress}>
         <View
-          position="absolute"
-          top={6}
-          right={6}
-          width={8}
-          height={8}
-          borderRadius={4}
-          borderWidth={1}
-          borderColor="white"
-          backgroundColor={palette.coral}
-        />
-      </View>
+          width={42}
+          height={38}
+          borderRadius={19}
+          backgroundColor={palette.fog}
+          alignItems="center"
+          justifyContent="center"
+        >
+          <View transform={[{ scaleX: 1.14 }]}>
+            <IconlyIcon name="Bell" size={22} />
+          </View>
+          {unreadCount > 0 ? (
+            <View
+              position="absolute"
+              top={6}
+              right={8}
+              width={8}
+              height={8}
+              borderRadius={4}
+              borderWidth={1}
+              borderColor="white"
+              backgroundColor={palette.coral}
+            />
+          ) : null}
+        </View>
+      </Pressable>
     </XStack>
   );
 }

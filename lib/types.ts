@@ -1,3 +1,7 @@
+import type { ImageSource } from 'expo-image';
+
+import type { IconlyIconName } from '@/components/icons/iconly-types';
+
 export type EventCategory =
   | 'featured'
   | 'art'
@@ -59,6 +63,16 @@ export type ChatMessage = {
   sentAt: string;
 };
 
+export type StatusUpdate = {
+  id: string;
+  name: string;
+  image?: string | null;
+  postedAt: string;
+  isSelf?: boolean;
+};
+
+export type ChatFilterTag = 'favorites' | 'work' | 'community';
+
 export type ChatThread = {
   id: string;
   kind: 'event' | 'direct';
@@ -66,7 +80,10 @@ export type ChatThread = {
   subtitle: string;
   accent: string;
   initials: string;
+  avatarImage?: ImageSource | string | number | null;
   unreadCount: number;
+  pinned?: boolean;
+  tags?: ChatFilterTag[];
   messages: ChatMessage[];
 };
 
@@ -79,6 +96,25 @@ export type SessionUser = {
   eventInterests: HostableCategory[];
   eventGoals: string[];
   memberSince: string;
+};
+
+export type NotificationKind = 'comment' | 'generated' | 'invite' | 'like';
+
+export type NotificationInviteStatus = 'pending' | 'accepted' | 'declined';
+
+export type NotificationItem = {
+  id: string;
+  actor: string;
+  time: string;
+  title: string;
+  detail?: string;
+  unread: boolean;
+  kind: NotificationKind;
+  eventId?: string;
+  icon: IconlyIconName;
+  iconColor: string;
+  iconBackground: string;
+  inviteStatus?: NotificationInviteStatus;
 };
 
 export type SearchSuggestion =

@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
     zIndex: 1000,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: palette.mist,
+    backgroundColor: palette.white,
     paddingHorizontal: 32,
   },
   content: {

@@ -6,10 +6,32 @@ import { Text, View, XStack, YStack } from 'tamagui';
 import { IconlyIcon } from '@/components/icons/iconly-icon';
 import { SectionLabel } from '@/components/ui/section-label';
 import { GuestAvatar, UserAvatar } from '@/components/ui/user-avatar';
+import { EventRow } from '@/components/events/event-row';
 import { goalOptions, hostableCategories, neighborhoodOptions } from '@/lib/event-data';
 import { palette } from '@/lib/palette';
-import type { HostableCategory } from '@/lib/types';
+import type { EventItem, HostableCategory } from '@/lib/types';
 import { useSessionStore } from '@/stores/session-store';
+
+const MAX_ACTIVITY_ROWS = 4;
+
+function ActivityCard({ title, items, onSelect }: { title: string; items: EventItem[]; onSelect: (id: string) => void }) {
+  if (items.length === 0) {
+    return null;
+  }
+
+  return (
+    <YStack gap={4} borderRadius={20} backgroundColor="white" borderWidth={1} borderColor={palette.line} padding={10}>
+      <Text fontSize={15} fontWeight="700" color={palette.ink} paddingHorizontal={6} paddingTop={4}>
+        {title}
+      </Text>
+      <YStack>
+        {items.slice(0, MAX_ACTIVITY_ROWS).map((event) => (
+          <EventRow key={event.id} event={event} showTypeLabel onSelect={() => onSelect(event.id)} />
+        ))}
+      </YStack>
+    </YStack>
+  );
+}
 
 function SelectableChip({
   label,
@@ -49,10 +71,15 @@ export default function ProfileScreen() {
   const user = useSessionStore((state) => state.user);
   const updateProfile = useSessionStore((state) => state.updateProfile);
   const signOut = useSessionStore((state) => state.signOut);
+  const hostedEvents = useSessionStore((state) => state.hostedEvents);
+  const hostedGroups = useSessionStore((state) => state.hostedGroups);
+  const interestedEvents = useSessionStore((state) => state.interestedEvents);
+  const interestedGroups = useSessionStore((state) => state.interestedGroups);
+  const openEvent = (eventId: string) => router.push(`/event/${eventId}`);
 
   if (!user) {
     return (
-      <YStack flex={1} alignItems="center" justifyContent="center" gap={12} backgroundColor={palette.mist} padding={32}>
+      <YStack flex={1} alignItems="center" justifyContent="center" gap={12} backgroundColor={palette.white} padding={32}>
         <GuestAvatar size={56} />
         <Text fontSize={16} fontWeight="700" color={palette.ink}>
           You&apos;re browsing as a guest
@@ -88,7 +115,7 @@ export default function ProfileScreen() {
   };
 
   return (
-    <View flex={1} backgroundColor={palette.mist}>
+    <View flex={1} backgroundColor={palette.white}>
       <ScrollView
         contentContainerStyle={{
           padding: 16,
@@ -128,6 +155,9 @@ export default function ProfileScreen() {
             </Text>
           </YStack>
         </XStack>
+
+        <ActivityCard title="Hosting" items={[...hostedEvents, ...hostedGroups]} onSelect={openEvent} />
+        <ActivityCard title="Interested" items={[...interestedEvents, ...interestedGroups]} onSelect={openEvent} />
 
         {/* Neighborhood */}
         <YStack gap={10} borderRadius={20} backgroundColor="white" borderWidth={1} borderColor={palette.line} padding={16}>

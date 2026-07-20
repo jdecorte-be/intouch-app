@@ -1,5 +1,6 @@
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import * as Haptics from 'expo-haptics';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Pressable, StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -92,6 +93,11 @@ export function BottomNav({ state, navigation }: BottomTabBarProps) {
 
   return (
     <View position="absolute" left={0} right={0} bottom={0} pointerEvents="box-none">
+      <LinearGradient
+        pointerEvents="none"
+        colors={['rgba(17,17,20,0)', 'rgba(17,17,20,0.05)']}
+        style={styles.topShadow}
+      />
       <XStack
         alignItems="center"
         justifyContent="space-between"
@@ -102,10 +108,10 @@ export function BottomNav({ state, navigation }: BottomTabBarProps) {
         position="relative"
         overflow="visible"
         shadowColor="#111114"
-        shadowOpacity={0.1}
-        shadowRadius={20}
-        shadowOffset={{ width: 0, height: -6 }}
-        elevation={12}
+        shadowOpacity={0.04}
+        shadowRadius={12}
+        shadowOffset={{ width: 0, height: -3 }}
+        elevation={4}
       >
         <MenuEdgeCurve placement="top" side="left" />
         <MenuEdgeCurve placement="bottom" side="left" />
@@ -141,6 +147,13 @@ export function BottomNav({ state, navigation }: BottomTabBarProps) {
 }
 
 const styles = StyleSheet.create({
+  topShadow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: -16,
+    height: 16,
+  },
   edgeCurve: {
     position: 'absolute',
   },

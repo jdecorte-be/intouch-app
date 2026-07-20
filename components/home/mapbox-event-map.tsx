@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 
-import { createMapboxMapHtml } from '@/lib/mapbox-map-html';
+import { createMapboxMapHtml, toMapEvent } from '@/lib/mapbox-map-html';
 
-import { FallbackEventMap, type EventMapItem } from './fallback-event-map';
+import { FallbackEventMap, type EventMapItem, type UserMapLocation } from './fallback-event-map';
 
 const mapboxAccessToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
 
@@ -10,6 +10,14 @@ type MapMessage = {
   type?: string;
   eventId?: string;
 };
+
+type MapWindow = Window & {
+  centerOnUserLocation?: (coordinates: UserMapLocation, options?: { keepZoom?: boolean }) => void;
+};
+
+function postMapMessage(frameWindow: Window | null | undefined, message: unknown) {
+  frameWindow?.postMessage(JSON.stringify(message), '*');
+}
 
 function parseMapMessage(data: unknown): MapMessage | null {
   if (typeof data !== 'string') {
@@ -27,13 +35,45 @@ function parseMapMessage(data: unknown): MapMessage | null {
 
 export function MapboxEventMap({
   events,
+  locateRequestId,
+  keepZoomOnLocate,
+  userLocation,
   onSelectEvent,
 }: {
   events: EventMapItem[];
+  locateRequestId?: number;
+  keepZoomOnLocate?: boolean;
+  userLocation?: UserMapLocation | null;
   onSelectEvent: (eventId: string) => void;
 }) {
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const html = useMemo(() => createMapboxMapHtml(events), [events]);
+  // Captured once on mount: the map's HTML/srcDoc must stay referentially
+  // stable across re-renders, or the iframe fully reloads (Mapbox
+  // reinitializes, tiles refetch, camera resets) every time `events`
+  // changes — e.g. on every category filter tap. Later event-list updates
+  // go through sendEventsUpdate below instead, into the already-running map.
+  const initialEventsRef = useRef(events);
+  const html = useMemo(() => createMapboxMapHtml(initialEventsRef.current), []);
+
+  const centerMap = useCallback(
+    (coordinates: UserMapLocation, options?: { keepZoom?: boolean }) => {
+      const mapWindow = frameRef.current?.contentWindow as MapWindow | null;
+
+      mapWindow?.centerOnUserLocation?.(coordinates, options);
+    },
+    [],
+  );
+
+  const sendEventsUpdate = useCallback((nextEvents: EventMapItem[]) => {
+    postMapMessage(frameRef.current?.contentWindow, {
+      type: 'retalk-map-update-events',
+      events: nextEvents.map(toMapEvent),
+    });
+  }, []);
+
+  useEffect(() => {
+    sendEventsUpdate(events);
+  }, [events, sendEventsUpdate]);
 
   useEffect(() => {
     const handleMessage = (message: MessageEvent) => {
@@ -55,16 +95,37 @@ export function MapboxEventMap({
     };
   }, [onSelectEvent]);
 
+  useEffect(() => {
+    if (!locateRequestId || !mapboxAccessToken || !userLocation) {
+      return;
+    }
+
+    centerMap(userLocation, { keepZoom: keepZoomOnLocate });
+  }, [centerMap, keepZoomOnLocate, locateRequestId, userLocation]);
+
   if (!mapboxAccessToken) {
-    return <FallbackEventMap events={events} onSelectEvent={onSelectEvent} />;
+    return (
+      <FallbackEventMap
+        events={events}
+        userLocation={userLocation}
+        onSelectEvent={onSelectEvent}
+      />
+    );
   }
 
   return (
     <iframe
       ref={frameRef}
+      onLoad={() => {
+        sendEventsUpdate(events);
+
+        if (userLocation) {
+          centerMap(userLocation, { keepZoom: true });
+        }
+      }}
       srcDoc={html}
       style={{
-        backgroundColor: '#dde3ec',
+        backgroundColor: '#ffffff',
         border: 'none',
         height: '100%',
         inset: 0,

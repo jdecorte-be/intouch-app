@@ -1,6 +1,6 @@
-import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { StyleSheet, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -16,17 +16,17 @@ import Animated, {
 } from 'react-native-reanimated';
 import { View } from 'tamagui';
 
-import { IconlyIcon } from '@/components/icons/iconly-icon';
 import { HeroEventCard } from '@/components/home/hero-event-card';
+import { IconlyIcon } from '@/components/icons/iconly-icon';
 import { palette } from '@/lib/palette';
 import type { EventInterestState, EventItem } from '@/lib/types';
 
 const EXIT_DURATION_MS = 260;
 const MAX_VISIBLE_CARDS = 3;
 const FRONT_MARGIN = 18;
-const RING_PEEK = 7;
-const GRAY_PEEK = 11;
-const STACK_ROTATIONS = [0, -3, 5];
+const RING_PEEK = 0;
+const GRAY_PEEK = 0;
+const STACK_ROTATIONS = [0, -7, 5];
 const STACK_TRANSLATE_Y = [0, 1, 3];
 const SWIPE_THRESHOLD = 112;
 const SPRING = { damping: 26, stiffness: 260, mass: 0.9 };
@@ -296,11 +296,11 @@ const styles = StyleSheet.create({
   },
   movingCard: {
     zIndex: 3,
-    borderRadius: 28,
+    borderRadius: 18,
     overflow: 'hidden',
   },
   backingCard: {
-    borderRadius: 30,
+    borderRadius: 18,
     overflow: 'hidden',
   },
   swipeHint: {
@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
     top: '46%',
     width: 34,
     height: 34,
-    borderRadius: 17,
+    borderRadius: 18,
     backgroundColor: 'rgba(9,9,11,0.35)',
     alignItems: 'center',
     justifyContent: 'center',

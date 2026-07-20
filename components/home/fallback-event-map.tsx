@@ -24,6 +24,12 @@ export type EventMapItem = {
   coordinates: [number, number];
 };
 
+export type UserMapLocation = {
+  longitude: number;
+  latitude: number;
+  accuracy?: number | null;
+};
+
 // Toronto bounding box used to project event coordinates onto the fallback board.
 const FALLBACK_BOUNDS = { west: -79.47, east: -79.28, north: 43.69, south: 43.62 };
 const DUPLICATE_COORDINATE_PRECISION = 5;
@@ -74,9 +80,11 @@ function spreadCoincidentCoordinates(events: EventMapItem[]) {
 
 export function FallbackEventMap({
   events,
+  userLocation,
   onSelectEvent,
 }: {
   events: EventMapItem[];
+  userLocation?: UserMapLocation | null;
   onSelectEvent: (eventId: string) => void;
 }) {
   const { width, height } = useWindowDimensions();
@@ -130,6 +138,34 @@ export function FallbackEventMap({
           </Pressable>
         );
       })}
+      {userLocation ? (
+        <View
+          pointerEvents="none"
+          position="absolute"
+          left={((userLocation.longitude - FALLBACK_BOUNDS.west) / spanX) * (width - 56) + 8}
+          top={((FALLBACK_BOUNDS.north - userLocation.latitude) / spanY) * (height * 0.5) + height * 0.22}
+          alignItems="center"
+          justifyContent="center"
+        >
+          <View
+            width={28}
+            height={28}
+            borderRadius={999}
+            backgroundColor="rgba(137,117,254,0.18)"
+            alignItems="center"
+            justifyContent="center"
+          >
+            <View
+              width={14}
+              height={14}
+              borderRadius={999}
+              borderWidth={3}
+              borderColor="white"
+              backgroundColor={palette.primary}
+            />
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }

@@ -20,7 +20,19 @@ type ChatState = {
 
 function upsertThread(threads: ChatThread[], thread: ChatThread) {
   return threads.some((candidate) => candidate.id === thread.id)
-    ? threads
+    ? threads.map((candidate) =>
+        candidate.id === thread.id
+          ? {
+              ...candidate,
+              title: thread.title,
+              subtitle: thread.subtitle,
+              accent: thread.accent,
+              initials: thread.initials,
+              avatarImage: thread.avatarImage ?? candidate.avatarImage,
+              messages: candidate.messages.length ? candidate.messages : thread.messages,
+            }
+          : candidate,
+      )
     : [thread, ...threads];
 }
 
@@ -32,10 +44,6 @@ export const useChatStore = create<ChatState>()(
       error: null,
 
       loadThreads: async () => {
-        if (get().hasLoaded) {
-          return;
-        }
-
         try {
           const threads = await api.fetchChatThreads();
           set((state) => ({
@@ -44,7 +52,9 @@ export const useChatStore = create<ChatState>()(
             hasLoaded: true,
           }));
         } catch {
-          set({ error: "Couldn't load chats. Try again." });
+          set((state) => ({
+            error: state.hasLoaded ? state.error : "Couldn't load chats. Try again.",
+          }));
         }
       },
 

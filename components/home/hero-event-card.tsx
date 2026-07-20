@@ -1,16 +1,28 @@
 import { memo } from 'react';
+import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Pressable } from 'react-native';
+import { Platform, Pressable, StyleSheet } from 'react-native';
 import type { GestureResponderEvent } from 'react-native';
 import { Text, View, XStack, YStack } from 'tamagui';
 
 import { IconlyIcon } from '@/components/icons/iconly-icon';
-import { AvatarGroup } from '@/components/ui/user-avatar';
+import { shareEvent } from '@/components/events/featured-event-card';
+import { AvatarGroup, UserAvatar } from '@/components/ui/user-avatar';
 import { eventImageUrl } from '@/lib/event-data';
 import { getCategoryLabel, getEventInterestState, splitStartsAt } from '@/lib/event-utils';
 import { palette } from '@/lib/palette';
 import type { EventInterestState, EventItem } from '@/lib/types';
+
+const joinButtonTextStyle = Platform.select({
+  web: {
+    fontFamily: '"SF Pro Rounded", "SF Pro Display", -apple-system, BlinkMacSystemFont, Inter, sans-serif',
+  },
+  ios: {
+    fontFamily: 'System',
+  },
+});
+const joinButtonGradient = [palette.primaryEnd, palette.primary] as const;
 
 function HeroEventCardComponent({
   event,
@@ -28,7 +40,7 @@ function HeroEventCardComponent({
   const interest = getEventInterestState(event, interestState);
   const [datePart, timePart] = splitStartsAt(event.startsAt);
   const isGroup = event.kind === 'group';
-  const extraGoing = Math.max(0, interest.going - 3);
+  const extraGoing = Math.max(0, interest.going - 6);
   const handleJoinPress = (pressEvent: GestureResponderEvent) => {
     pressEvent.stopPropagation();
     onJoin();
@@ -36,6 +48,10 @@ function HeroEventCardComponent({
   const handleToggleInterestPress = (pressEvent: GestureResponderEvent) => {
     pressEvent.stopPropagation();
     onToggleInterest();
+  };
+  const handleSharePress = (pressEvent: GestureResponderEvent) => {
+    pressEvent.stopPropagation();
+    shareEvent(event);
   };
 
   return (
@@ -91,20 +107,20 @@ function HeroEventCardComponent({
 
           <XStack flexWrap="wrap" columnGap={14} rowGap={4}>
             <XStack alignItems="center" gap={5}>
-              <IconlyIcon name="Location" size={13} color="rgba(255,255,255,0.85)" />
+              <IconlyIcon name="Location" size={15} color="rgba(255,255,255,0.85)" />
               <Text fontSize={12} fontWeight="600" color="rgba(255,255,255,0.85)" numberOfLines={1}>
                 {event.neighborhood}
               </Text>
             </XStack>
             <XStack alignItems="center" gap={5}>
-              <IconlyIcon name="Calendar" size={13} color="rgba(255,255,255,0.85)" />
+              <IconlyIcon name="Calendar" size={15} color="rgba(255,255,255,0.85)" />
               <Text fontSize={12} fontWeight="600" color="rgba(255,255,255,0.85)">
                 {datePart}
               </Text>
             </XStack>
             {timePart ? (
               <XStack alignItems="center" gap={5}>
-                <IconlyIcon name="Clock" size={13} color="rgba(255,255,255,0.85)" />
+                <IconlyIcon name="Clock" size={15} color="rgba(255,255,255,0.85)" />
                 <Text fontSize={12} fontWeight="600" color="rgba(255,255,255,0.85)">
                   {timePart}
                 </Text>
@@ -112,59 +128,92 @@ function HeroEventCardComponent({
             ) : null}
           </XStack>
 
-          <XStack alignItems="center" justifyContent="space-between" marginTop={2}>
+          <XStack
+            alignItems="center"
+            justifyContent="space-between"
+            marginTop={4}
+            paddingTop={12}
+            borderTopWidth={1}
+            borderTopColor="rgba(255,255,255,0.22)"
+          >
             <XStack alignItems="center" gap={8}>
-              <XStack alignItems="center">
+              <XStack
+                alignItems="center"
+                minHeight={30}
+                borderRadius={999}
+                backgroundColor="rgba(255,255,255,0.16)"
+                borderWidth={1}
+                borderColor="rgba(255,255,255,0.2)"
+                paddingHorizontal={5}
+                paddingVertical={5}
+              >
                 <AvatarGroup
-                  labels={event.attendees.slice(0, 3).map((attendee) => ({
-                    label: attendee.name,
-                    image: attendee.image,
-                  }))}
-                  size={26}
+                  labels={event.attendees
+                    .slice(0, extraGoing > 0 ? 5 : 6)
+                    .map((attendee) => ({
+                      label: attendee.name,
+                      image: attendee.image,
+                    }))}
+                  size={22}
                 />
                 {extraGoing > 0 ? (
-                  <View
-                    marginLeft={-8}
-                    width={26}
-                    height={26}
-                    borderRadius={13}
-                    borderWidth={2}
-                    borderColor="white"
-                    backgroundColor={palette.ink}
-                    alignItems="center"
-                    justifyContent="center"
-                  >
-                    <Text fontSize={9} fontWeight="700" color="white">
-                      +{extraGoing}
-                    </Text>
+                  <View marginLeft={-7} borderWidth={2} borderColor="white" borderRadius={13} overflow="hidden">
+                    <View width={22} height={22}>
+                      <UserAvatar
+                        label={event.attendees[5]?.name ?? 'Guest'}
+                        image={event.attendees[5]?.image}
+                        size={22}
+                      />
+                      <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+                      <View style={StyleSheet.absoluteFill} alignItems="center" justifyContent="center">
+                        <Text fontSize={8} fontWeight="700" color="white">
+                          {extraGoing}+
+                        </Text>
+                      </View>
+                    </View>
                   </View>
                 ) : null}
               </XStack>
 
-              <Pressable onPress={handleJoinPress} hitSlop={6}>
+              <Pressable onPress={handleSharePress} hitSlop={6}>
                 <View
-                  width={34}
-                  height={34}
-                  borderRadius={17}
-                  backgroundColor="rgba(255,255,255,0.22)"
+                  width={38}
+                  height={38}
+                  borderRadius={19}
+                  overflow="hidden"
                   alignItems="center"
                   justifyContent="center"
                 >
-                  <IconlyIcon name="MessageCircleDots" size={16} color="white" />
+                  <BlurView intensity={24} tint="light" style={StyleSheet.absoluteFill} />
+                  <View
+                    style={StyleSheet.absoluteFill}
+                    backgroundColor="rgba(255,255,255,0.16)"
+                    borderWidth={1}
+                    borderColor="rgba(255,255,255,0.2)"
+                  />
+                  <IconlyIcon name="ExportSquare" size={17} color="white" pack="basic" />
                 </View>
               </Pressable>
+
               <Pressable onPress={handleToggleInterestPress} hitSlop={6}>
                 <View
-                  width={34}
-                  height={34}
-                  borderRadius={17}
-                  backgroundColor="rgba(255,255,255,0.22)"
+                  width={38}
+                  height={38}
+                  borderRadius={19}
+                  overflow="hidden"
                   alignItems="center"
                   justifyContent="center"
                 >
+                  <BlurView intensity={24} tint="light" style={StyleSheet.absoluteFill} />
+                  <View
+                    style={StyleSheet.absoluteFill}
+                    backgroundColor="rgba(255,255,255,0.16)"
+                    borderWidth={1}
+                    borderColor="rgba(255,255,255,0.2)"
+                  />
                   <IconlyIcon
                     name="Heart"
-                    size={16}
+                    size={18}
                     color="white"
                     pack={interest.isInterested ? 'filled' : 'basic'}
                   />
@@ -172,14 +221,14 @@ function HeroEventCardComponent({
               </Pressable>
             </XStack>
 
-            <Pressable onPress={handleJoinPress}>
+            <Pressable onPress={handleJoinPress} style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}>
               <LinearGradient
-                colors={palette.primaryGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
+                colors={joinButtonGradient}
+                start={{ x: 0.5, y: 0 }}
+                end={{ x: 0.5, y: 1 }}
                 style={{ borderRadius: 999, paddingHorizontal: 22, paddingVertical: 11 }}
               >
-                <Text fontSize={13} fontWeight="700" color="white">
+                <Text fontSize={13} fontWeight="500" color="white" style={joinButtonTextStyle}>
                   Join
                 </Text>
               </LinearGradient>

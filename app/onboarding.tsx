@@ -15,6 +15,7 @@ import { IconlyIcon, type IconlyIconName } from '@/components/icons/iconly-icon'
 import { SectionLabel } from '@/components/ui/section-label';
 import { goalOptions, hostableCategories, neighborhoodOptions } from '@/lib/event-data';
 import { palette } from '@/lib/palette';
+import { appTextInputStyle } from '@/lib/typography';
 import type { HostableCategory } from '@/lib/types';
 import { useSessionStore } from '@/stores/session-store';
 
@@ -76,7 +77,7 @@ export default function OnboardingScreen() {
   };
 
   return (
-    <View flex={1} backgroundColor={palette.mist}>
+    <View flex={1} backgroundColor={palette.white}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex}
@@ -410,6 +411,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   input: {
+    ...appTextInputStyle,
     minHeight: 46,
     borderWidth: 1,
     borderColor: palette.line,

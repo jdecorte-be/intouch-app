@@ -14,11 +14,13 @@ import {
   neighborhoodOptions,
 } from '@/lib/event-data';
 import { palette } from '@/lib/palette';
+import { appTextInputStyle } from '@/lib/typography';
 import type { EventItem, HostableCategory } from '@/lib/types';
 import { useEventsStore } from '@/stores/events-store';
 import { useSessionStore } from '@/stores/session-store';
 
 const fieldStyle = {
+  ...appTextInputStyle,
   fontSize: 14,
   fontWeight: '500' as const,
   color: palette.ink,
@@ -183,7 +185,7 @@ export default function HostScreen() {
   };
 
   return (
-    <View flex={1} backgroundColor={palette.mist}>
+    <View flex={1} backgroundColor={palette.white}>
       <XStack
         alignItems="center"
         justifyContent="space-between"

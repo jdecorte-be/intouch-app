@@ -2,6 +2,7 @@ import { defaultConfig } from '@tamagui/config/v5';
 import { createTamagui } from 'tamagui';
 
 import { palette } from './lib/palette';
+import { appFontFamily } from './lib/typography';
 
 const brandColors = {
   ink: palette.ink,
@@ -32,6 +33,17 @@ const brandColors = {
   accentSoft: palette.accentSoft,
 } as const;
 
+const appFonts = {
+  body: {
+    ...defaultConfig.fonts.body,
+    family: appFontFamily,
+  },
+  heading: {
+    ...defaultConfig.fonts.heading,
+    family: appFontFamily,
+  },
+};
+
 export const tamaguiConfig = createTamagui({
   ...defaultConfig,
   settings: {
@@ -44,11 +56,12 @@ export const tamaguiConfig = createTamagui({
     ...defaultConfig.tokens,
     color: brandColors,
   },
+  fonts: appFonts,
   themes: {
     ...defaultConfig.themes,
     light: {
       ...defaultConfig.themes.light,
-      background: palette.mist,
+      background: palette.white,
       color: palette.ink,
       colorHover: palette.inkSoft,
       borderColor: palette.line,

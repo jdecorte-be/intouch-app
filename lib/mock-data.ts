@@ -1,6 +1,15 @@
 import { addCalendarDays, formatDayLabel, toLocalDateKey } from './date-utils';
 import { categoryAccents, neighborhoodLocations } from './event-data';
-import type { ChatThread, EventAttendee, EventItem, HostableCategory, SessionUser } from './types';
+import { palette } from './palette';
+import type {
+  ChatThread,
+  EventAttendee,
+  EventItem,
+  HostableCategory,
+  NotificationItem,
+  SessionUser,
+  StatusUpdate,
+} from './types';
 
 // Placeholder data shaped exactly like the future PostgreSQL rows so the
 // api layer can swap in real queries without touching the UI.
@@ -62,7 +71,7 @@ export const mockEvents: EventItem[] = [
     going: 34,
     capacity: 40,
     hosts: ['Maya Chen'],
-    attendees: [people.maya, people.theo, people.sofia, people.dana],
+    attendees: [people.maya, people.theo, people.sofia, people.dana, people.jonas, people.priya],
     tags: ['Painting', 'Golden hour', 'Beginner friendly'],
     seed: 1,
   }),
@@ -81,7 +90,7 @@ export const mockEvents: EventItem[] = [
     going: 58,
     capacity: 80,
     hosts: ['Jonas Berg'],
-    attendees: [people.jonas, people.liam, people.priya],
+    attendees: [people.jonas, people.liam, people.priya, people.amara, people.eli, people.noor],
     tags: ['Running', '5k', 'Coffee after'],
     seed: 2,
   }),
@@ -100,7 +109,7 @@ export const mockEvents: EventItem[] = [
     going: 96,
     capacity: 120,
     hosts: ['Eli Tremblay'],
-    attendees: [people.eli, people.dana, people.theo, people.priya],
+    attendees: [people.eli, people.dana, people.theo, people.priya, people.maya, people.sofia],
     tags: ['Board games', 'Matchmaking', 'Weeknight'],
     seed: 3,
   }),
@@ -119,7 +128,7 @@ export const mockEvents: EventItem[] = [
     going: 142,
     capacity: 150,
     hosts: ['Amara Osei'],
-    attendees: [people.amara, people.priya, people.liam, people.sofia],
+    attendees: [people.amara, people.priya, people.liam, people.sofia, people.jonas, people.dana],
     tags: ['Newcomers', 'Friends', 'Weekly'],
     seed: 4,
   }),
@@ -138,7 +147,7 @@ export const mockEvents: EventItem[] = [
     going: 21,
     capacity: 30,
     hosts: ['Amara Osei'],
-    attendees: [people.amara, people.dana],
+    attendees: [people.amara, people.dana, people.maya, people.theo, people.priya, people.liam],
     tags: ['History', 'Walking tour', 'Tasting'],
     seed: 5,
   }),
@@ -157,7 +166,7 @@ export const mockEvents: EventItem[] = [
     going: 24,
     capacity: 25,
     hosts: ['Noor Haddad'],
-    attendees: [people.noor, people.sofia, people.theo],
+    attendees: [people.noor, people.sofia, people.theo, people.jonas, people.dana, people.eli],
     tags: ['Fiction', 'Monthly', 'Cozy'],
     seed: 6,
   }),
@@ -176,7 +185,7 @@ export const mockEvents: EventItem[] = [
     going: 10,
     capacity: 12,
     hosts: ['Maya Chen'],
-    attendees: [people.maya, people.priya],
+    attendees: [people.maya, people.priya, people.liam, people.sofia, people.noor, people.eli],
     tags: ['Pottery', 'Hands-on', 'Small group'],
     seed: 7,
   }),
@@ -195,7 +204,7 @@ export const mockEvents: EventItem[] = [
     going: 178,
     capacity: 200,
     hosts: ['DJ Marlowe'],
-    attendees: [people.liam, people.dana, people.sofia],
+    attendees: [people.liam, people.dana, people.sofia, people.maya, people.theo, people.priya],
     tags: ['Dancing', 'Rooftop', 'Late night'],
     seed: 8,
   }),
@@ -214,7 +223,7 @@ export const mockEvents: EventItem[] = [
     going: 61,
     capacity: 70,
     hosts: ['Eli Tremblay'],
-    attendees: [people.eli, people.theo],
+    attendees: [people.eli, people.theo, people.jonas, people.amara, people.liam, people.sofia],
     tags: ['Stand-up', 'Open mic', 'Tonight'],
     seed: 9,
   }),
@@ -233,7 +242,14 @@ export const mockEvents: EventItem[] = [
     going: 33,
     capacity: 45,
     hosts: ['Sofia Ricci'],
-    attendees: [{ ...people.sofia, role: 'Group organizer', isHost: true }, people.maya, people.dana],
+    attendees: [
+      { ...people.sofia, role: 'Group organizer', isHost: true },
+      people.maya,
+      people.dana,
+      people.theo,
+      people.priya,
+      people.jonas,
+    ],
     tags: ['Drawing', 'Galleries', 'Sundays'],
     seed: 10,
   }),
@@ -252,7 +268,7 @@ export const mockEvents: EventItem[] = [
     going: 44,
     capacity: 60,
     hosts: ['Jonas Berg'],
-    attendees: [people.jonas, people.liam],
+    attendees: [people.jonas, people.liam, people.amara, people.sofia, people.noor, people.eli],
     tags: ['Volleyball', 'Drop-in', 'Outdoors'],
     seed: 11,
   }),
@@ -271,7 +287,7 @@ export const mockEvents: EventItem[] = [
     going: 87,
     capacity: 100,
     hosts: ['Noor Haddad'],
-    attendees: [people.noor, people.priya, people.theo],
+    attendees: [people.noor, people.priya, people.theo, people.maya, people.dana, people.eli],
     tags: ['Languages', 'Conversation', 'Weekly'],
     seed: 12,
   }),
@@ -288,7 +304,112 @@ export const mockUser: SessionUser = {
   memberSince: 'March 2026',
 };
 
+export const mockNotifications: NotificationItem[] = [
+  {
+    id: 'maya-comment',
+    actor: 'Maya Chen',
+    time: '12m ago',
+    title: 'Commented on Sunset Paint & Sip',
+    detail: 'These evening sessions look really good. Maybe we should save spots before it fills up.',
+    unread: true,
+    kind: 'comment',
+    eventId: 'evt-sunset-paint',
+    icon: 'MessageCircleDots',
+    iconColor: palette.primary,
+    iconBackground: palette.primarySoft,
+  },
+  {
+    id: 'pottery-generated',
+    actor: 'Clayworks Studio',
+    time: '34m ago',
+    title: 'New event near Leslieville',
+    detail: 'Intro to Wheel Throwing has a few open seats this weekend.',
+    unread: true,
+    kind: 'generated',
+    eventId: 'evt-pottery-workshop',
+    icon: 'Sparkles',
+    iconColor: palette.warnText,
+    iconBackground: palette.warnSoft,
+  },
+  {
+    id: 'jonas-invite',
+    actor: 'Jonas Berg',
+    time: '1h ago',
+    title: 'Invited you to Riverside Morning Runners',
+    unread: true,
+    kind: 'invite',
+    eventId: 'grp-morning-runners',
+    icon: 'UserPlus',
+    iconColor: palette.green,
+    iconBackground: palette.tealSoft,
+    inviteStatus: 'pending',
+  },
+  {
+    id: 'liam-like',
+    actor: 'Liam Doyle',
+    time: '1h ago',
+    title: 'Liked Big Board Game Night',
+    unread: false,
+    kind: 'like',
+    eventId: 'evt-board-game-night',
+    icon: 'Heart',
+    iconColor: palette.coral,
+    iconBackground: palette.coralSoft,
+  },
+  {
+    id: 'noor-comment',
+    actor: 'Noor Haddad',
+    time: '2h ago',
+    title: 'Commented on Parkdale Page Turners',
+    detail: 'The next book pick is locked in. Bring one discussion question if you can.',
+    unread: false,
+    kind: 'comment',
+    eventId: 'grp-page-turners',
+    icon: 'MessageCircleDots',
+    iconColor: palette.primary,
+    iconBackground: palette.primarySoft,
+  },
+];
+
+const chatPaintTestImage = require('../assets/images/chat-paint-test.png');
+
+const portraitPhoto = (photoId: string, width = 300) =>
+  `https://images.unsplash.com/${photoId}?auto=format&fit=facearea&facepad=2.5&w=${width}&q=70`;
+
+const boardGameNightImage = 'https://images.unsplash.com/photo-1606167668584-78701c57f13d?auto=format&fit=crop&w=300&q=70';
+const priyaAvatarImage = portraitPhoto('photo-1544005313-94ddf0286df2');
+const morganAvatarImage = portraitPhoto('photo-1500648767791-00dcc994a43e');
+
+export const mockStatusUpdates: StatusUpdate[] = [
+  { id: 'status-you', name: 'You', image: null, postedAt: 'Add Status', isSelf: true },
+  { id: 'status-courtney', name: 'Courtney', image: null, postedAt: '1 minutes ago' },
+  { id: 'status-cameron', name: 'Cameron', image: null, postedAt: '1 minutes ago' },
+  { id: 'status-kathyrn', name: 'Kathyrn', image: null, postedAt: '5 minutes ago' },
+];
+
 export const mockChatThreads: ChatThread[] = [
+  {
+    id: 'event-chat-evt-sunset-paint',
+    kind: 'event',
+    title: 'Sunset Paint & Sip on the Boardwalk',
+    subtitle: '34 members · The Beaches',
+    accent: categoryAccents.art,
+    initials: 'SP',
+    avatarImage: chatPaintTestImage,
+    unreadCount: 0,
+    pinned: true,
+    tags: ['community'],
+    messages: [
+      {
+        id: 'm-test-image',
+        author: 'Maya Chen',
+        authorImage: null,
+        fromSelf: false,
+        text: 'Using the image as this chat avatar for the test.',
+        sentAt: '6:05 PM',
+      },
+    ],
+  },
   {
     id: 'event-chat-evt-board-game-night',
     kind: 'event',
@@ -296,7 +417,9 @@ export const mockChatThreads: ChatThread[] = [
     subtitle: '96 members · Kensington Market',
     accent: categoryAccents.games,
     initials: 'BG',
+    avatarImage: boardGameNightImage,
     unreadCount: 2,
+    tags: ['community'],
     messages: [
       {
         id: 'm1',
@@ -323,7 +446,9 @@ export const mockChatThreads: ChatThread[] = [
     subtitle: 'Met at New in Toronto Social Club',
     accent: '#5b6b82',
     initials: 'PP',
+    avatarImage: priyaAvatarImage,
     unreadCount: 0,
+    tags: ['favorites'],
     messages: [
       {
         id: 'm3',
@@ -340,6 +465,27 @@ export const mockChatThreads: ChatThread[] = [
         fromSelf: true,
         text: 'Planning on it! Want to share a streetcar down?',
         sentAt: '1:20 PM',
+      },
+    ],
+  },
+  {
+    id: 'direct-user-morgan',
+    kind: 'direct',
+    title: 'Morgan Reyes',
+    subtitle: 'Co-host · Sunset Paint & Sip',
+    accent: '#7d6f62',
+    initials: 'MR',
+    avatarImage: morganAvatarImage,
+    unreadCount: 1,
+    tags: ['work'],
+    messages: [
+      {
+        id: 'm5',
+        author: 'Morgan Reyes',
+        authorImage: null,
+        fromSelf: false,
+        text: 'Can you grab the easels from storage before Thursday?',
+        sentAt: '11:02 AM',
       },
     ],
   },

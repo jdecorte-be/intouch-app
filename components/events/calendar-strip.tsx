@@ -18,13 +18,13 @@ function RoundIconButton({ name, onPress }: { name: 'ChevronLeft' | 'ChevronRigh
   return (
     <Pressable onPress={onPress} hitSlop={8}>
       <View
-        width={32}
-        height={32}
-        borderRadius={16}
+        width={38}
+        height={38}
+        borderRadius={19}
         alignItems="center"
         justifyContent="center"
       >
-        <IconlyIcon name={name} size={18} color={palette.gray} />
+        <IconlyIcon name={name} size={20} color={palette.gray} />
       </View>
     </Pressable>
   );
