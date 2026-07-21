@@ -11,6 +11,7 @@ const mapboxAccessToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN;
 type MapMessage = {
   type?: string;
   eventId?: string;
+  eventIds?: string[];
 };
 
 function parseMapMessage(data: string): MapMessage | null {
@@ -29,12 +30,14 @@ export function MapboxEventMap({
   keepZoomOnLocate,
   userLocation,
   onSelectEvent,
+  onVisibleEventIdsChange,
 }: {
   events: EventMapItem[];
   locateRequestId?: number;
   keepZoomOnLocate?: boolean;
   userLocation?: UserMapLocation | null;
   onSelectEvent: (eventId: string) => void;
+  onVisibleEventIdsChange?: (eventIds: string[]) => void;
 }) {
   const webViewRef = useRef<WebView>(null);
   // Captured once on mount: the map's HTML must stay referentially stable
@@ -97,6 +100,10 @@ export function MapboxEventMap({
 
     if (data?.type === 'retalk-map-event-select' && data.eventId) {
       onSelectEvent(data.eventId);
+    }
+
+    if (data?.type === 'retalk-map-visible-events' && data.eventIds) {
+      onVisibleEventIdsChange?.(data.eventIds);
     }
   };
 

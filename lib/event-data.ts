@@ -19,16 +19,79 @@ export const hostableCategories = categories.filter(
 );
 
 export const categoryAccents: Record<HostableCategory, string> = {
-  art: '#ff6b6b',
-  sport: '#4ecdc4',
-  games: '#6f7280',
-  social: '#292f36',
-  educational: '#5b6b82',
-  books: '#7d6f62',
-  workshops: '#4d7d6d',
-  party: '#6f5f7f',
-  comedy: '#d56f5f',
+  art: '#ff6b9d',
+  sport: '#2ee6c9',
+  games: '#7c83fd',
+  social: '#ff9de2',
+  educational: '#5eb1ff',
+  books: '#ffb84d',
+  workshops: '#3ddc84',
+  party: '#c084fc',
+  comedy: '#ff9457',
 };
+
+function hexToHsl(hex: string) {
+  const value = hex.replace('#', '');
+  const r = parseInt(value.slice(0, 2), 16) / 255;
+  const g = parseInt(value.slice(2, 4), 16) / 255;
+  const b = parseInt(value.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+
+  if (max === min) {
+    return { h: 0, s: 0, l };
+  }
+
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+  let h = 0;
+
+  if (max === r) {
+    h = (g - b) / d + (g < b ? 6 : 0);
+  } else if (max === g) {
+    h = (b - r) / d + 2;
+  } else {
+    h = (r - g) / d + 4;
+  }
+
+  return { h: h / 6, s, l };
+}
+
+function hslToHex(h: number, s: number, l: number) {
+  const hueToRgb = (p: number, q: number, t: number) => {
+    let tt = t;
+
+    if (tt < 0) tt += 1;
+    if (tt > 1) tt -= 1;
+    if (tt < 1 / 6) return p + (q - p) * 6 * tt;
+    if (tt < 1 / 2) return q;
+    if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
+
+    return p;
+  };
+
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+  const toHex = (channel: number) =>
+    Math.round(channel * 255)
+      .toString(16)
+      .padStart(2, '0');
+
+  return `#${toHex(hueToRgb(p, q, h + 1 / 3))}${toHex(hueToRgb(p, q, h))}${toHex(hueToRgb(p, q, h - 1 / 3))}`;
+}
+
+// Brighter, lighter take on a category accent — used for the border of
+// group map pins so groups read as a livelier ring than the flat accent.
+export function lightenAccent(hex: string) {
+  const { h, s, l } = hexToHsl(hex);
+
+  return hslToHex(h, Math.min(1, s + 0.12), Math.min(0.92, l + 0.16));
+}
+
+export const categoryAccentsLight: Record<HostableCategory, string> = Object.fromEntries(
+  Object.entries(categoryAccents).map(([category, hex]) => [category, lightenAccent(hex)]),
+) as Record<HostableCategory, string>;
 
 export const neighborhoodLocations: Record<string, [number, number]> = {
   Riverside: [-79.3532, 43.6591],

@@ -8,10 +8,10 @@ import { Text, View, XStack, YStack } from 'tamagui';
 
 import { IconlyIcon } from '@/components/icons/iconly-icon';
 import { eventImageUrl } from '@/lib/event-data';
-import { getEventIdFromChatThread, splitStartsAt } from '@/lib/event-utils';
+import { splitStartsAt } from '@/lib/event-utils';
 import { palette } from '@/lib/palette';
 import type { EventItem } from '@/lib/types';
-import { useChatStore } from '@/stores/chat-store';
+import { selectSubscribedEventIds, useChatStore } from '@/stores/chat-store';
 import { useEventsStore } from '@/stores/events-store';
 
 const SCREEN_BACKGROUND = palette.white;
@@ -149,19 +149,12 @@ export default function TicketsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const events = useEventsStore((state) => state.events);
-  const threads = useChatStore((state) => state.threads);
+  const subscribedIds = useChatStore(selectSubscribedEventIds);
 
-  const subscribedEvents = useMemo(() => {
-    const subscribedIds = new Set(
-      threads.flatMap((thread) => {
-        const eventId = thread.kind === 'event' ? getEventIdFromChatThread(thread.id) : null;
-
-        return eventId ? [eventId] : [];
-      }),
-    );
-
-    return events.filter((event) => subscribedIds.has(event.id));
-  }, [events, threads]);
+  const subscribedEvents = useMemo(
+    () => events.filter((event) => subscribedIds.has(event.id)),
+    [events, subscribedIds],
+  );
 
   return (
     <View flex={1} backgroundColor={SCREEN_BACKGROUND}>

@@ -4,6 +4,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import * as api from '@/lib/api';
 import { zustandStorage } from '@/lib/storage';
 import type { NotificationInviteStatus, NotificationItem } from '@/lib/types';
+import { useSessionStore } from '@/stores/session-store';
 
 type NotificationsState = {
   notifications: NotificationItem[];
@@ -26,8 +27,19 @@ export const useNotificationsStore = create<NotificationsState>()(
           return;
         }
 
-        const notifications = await api.fetchNotifications();
-        set({ notifications, hasLoaded: true });
+        const token = useSessionStore.getState().token;
+
+        if (!token) {
+          set({ hasLoaded: true });
+          return;
+        }
+
+        try {
+          const notifications = await api.fetchNotifications(token);
+          set({ notifications, hasLoaded: true });
+        } catch {
+          set({ hasLoaded: true });
+        }
       },
 
       markRead: (id) =>

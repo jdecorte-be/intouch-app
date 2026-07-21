@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { useState } from 'react';
 import { Text, View } from 'tamagui';
 
 import { IconlyIcon } from '@/components/icons/iconly-icon';
@@ -17,12 +18,15 @@ export function UserAvatar({
   borderColor?: string;
   borderWidth?: number;
 }) {
-  if (image) {
+  const [failedImage, setFailedImage] = useState<string | null>(null);
+
+  if (image && image !== failedImage) {
     return (
       <Image
         source={image}
         style={{ width: size, height: size, borderRadius: size / 2, borderColor, borderWidth }}
         contentFit="cover"
+        onError={() => setFailedImage(image)}
       />
     );
   }

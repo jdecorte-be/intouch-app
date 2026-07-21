@@ -14,7 +14,7 @@ import { NotificationPopover } from '@/components/home/notification-popover';
 import type { UserMapLocation } from '@/components/home/fallback-event-map';
 import { IconlyIcon } from '@/components/icons/iconly-icon';
 import { palette } from '@/lib/palette';
-import { selectVisibleEvents, useEventsStore } from '@/stores/events-store';
+import { selectVisibleCategoryCounts, selectVisibleEvents, useEventsStore } from '@/stores/events-store';
 
 const NAV_CLEARANCE = 80;
 
@@ -28,6 +28,11 @@ export default function ExploreScreen() {
   const [keepZoomOnLocate, setKeepZoomOnLocate] = useState(true);
   const [isLocating, setIsLocating] = useState(false);
   const [userLocation, setUserLocation] = useState<UserMapLocation | null>(null);
+  const [visibleEventIds, setVisibleEventIds] = useState<Set<string> | null>(null);
+
+  const handleVisibleEventIdsChange = (eventIds: string[]) => {
+    setVisibleEventIds(new Set(eventIds));
+  };
 
   const eventsState = useEventsStore();
   const visibleEvents = useMemo(
@@ -42,6 +47,20 @@ export default function ExploreScreen() {
       eventsState.maxPriceCad,
       eventsState.maxGroupSize,
       eventsState.happeningNowOnly,
+    ],
+  );
+  const mapCategoryCounts = useMemo(
+    () => selectVisibleCategoryCounts(eventsState, visibleEventIds),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      eventsState.events,
+      eventsState.activityScope,
+      eventsState.selectedDayKey,
+      eventsState.maxDistanceKm,
+      eventsState.maxPriceCad,
+      eventsState.maxGroupSize,
+      eventsState.happeningNowOnly,
+      visibleEventIds,
     ],
   );
 
@@ -99,6 +118,7 @@ export default function ExploreScreen() {
         keepZoomOnLocate={keepZoomOnLocate}
         userLocation={userLocation}
         onSelectEvent={openEvent}
+        onVisibleEventIdsChange={handleVisibleEventIdsChange}
       />
 
       <YStack
@@ -118,6 +138,7 @@ export default function ExploreScreen() {
         <CategoryChips
           activeCategory={eventsState.activeCategory}
           onCategoryChange={eventsState.setActiveCategory}
+          categoryCounts={mapCategoryCounts}
           onMap
         />
       </YStack>

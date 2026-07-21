@@ -10,19 +10,45 @@ export function CategoryChips({
   activeCategory,
   onCategoryChange,
   onMap = false,
+  categoryCounts,
 }: {
   activeCategory: EventCategory;
   onCategoryChange: (category: EventCategory) => void;
   onMap?: boolean;
+  /**
+   * When provided, restricts the chip row to categories with at least one
+   * marker in it (plus "featured" and the active category, so the active
+   * chip never disappears out from under the user), and shows each chip's
+   * marker count as a badge.
+   */
+  categoryCounts?: Partial<Record<EventCategory, number>>;
 }) {
+  const visibleCategories = categoryCounts
+    ? categories.filter(
+        (category) =>
+          category.id === 'featured' ||
+          category.id === activeCategory ||
+          (categoryCounts[category.id] ?? 0) > 0,
+      )
+    : categories;
+
+  const totalCount = categoryCounts
+    ? Object.values(categoryCounts).reduce((sum: number, count) => sum + (count ?? 0), 0)
+    : null;
+
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={{ gap: 8, paddingHorizontal: onMap ? 12 : 0, paddingVertical: 4 }}
     >
-      {categories.map((category) => {
+      {visibleCategories.map((category) => {
         const isActive = activeCategory === category.id;
+        const count = categoryCounts
+          ? category.id === 'featured'
+            ? totalCount
+            : (categoryCounts[category.id] ?? 0)
+          : null;
 
         return (
           <Pressable key={category.id} onPress={() => onCategoryChange(category.id)}>
@@ -49,6 +75,25 @@ export function CategoryChips({
               >
                 {getMobileCategoryControlLabel(category.id)}
               </Text>
+              {count !== null ? (
+                <XStack
+                  minWidth={18}
+                  height={18}
+                  paddingHorizontal={4}
+                  borderRadius={999}
+                  alignItems="center"
+                  justifyContent="center"
+                  backgroundColor={isActive ? 'rgba(255,255,255,0.24)' : palette.fog}
+                >
+                  <Text
+                    fontSize={10}
+                    fontWeight="800"
+                    color={isActive ? 'white' : palette.slate}
+                  >
+                    {count}
+                  </Text>
+                </XStack>
+              ) : null}
             </XStack>
           </Pressable>
         );

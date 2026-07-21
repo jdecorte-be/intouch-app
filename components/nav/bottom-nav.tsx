@@ -18,7 +18,7 @@ const tabConfig: Record<string, TabConfig> = {
   index: { label: 'Home', icon: 'Home' },
   explore: { label: 'Explore', icon: 'Compass' },
   chats: { label: 'Messages', icon: 'MessageCircleDots' },
-  tickets: { label: 'Tickets', icon: 'Ticket' },
+  // tickets: { label: 'Tickets', icon: 'Ticket' },
 };
 
 function MenuEdgeCurve({ placement, side }: { placement: 'top' | 'bottom'; side: 'left' | 'right' }) {

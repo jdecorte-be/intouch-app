@@ -44,14 +44,36 @@ export const avatarAccents = [
   '#d56f5f',
 ] as const;
 
-export function getAvatarAccent(label: string) {
+function hashLabel(label: string) {
   let hash = 0;
 
   for (let index = 0; index < label.length; index += 1) {
     hash = (hash * 31 + label.charCodeAt(index)) | 0;
   }
 
-  return avatarAccents[Math.abs(hash) % avatarAccents.length];
+  return Math.abs(hash);
+}
+
+export function getAvatarAccent(label: string) {
+  return avatarAccents[hashLabel(label) % avatarAccents.length];
+}
+
+// Diagonal gradient pairs for generated cover banners (profiles without a
+// photo), built from the brand palette so a "random" banner still looks
+// intentional rather than arbitrary.
+export const bannerGradients: readonly [string, string][] = [
+  ['#8975fe', '#4ecdc4'],
+  ['#ff6b6b', '#f2a541'],
+  ['#4ecdc4', '#8975fe'],
+  ['#347d6f', '#4ecdc4'],
+  ['#8975fe', '#ff6b6b'],
+  ['#f2a541', '#8975fe'],
+  ['#4ecdc4', '#347d6f'],
+  ['#9d8cff', '#ff6b6b'],
+] as const;
+
+export function getBannerGradient(label: string) {
+  return bannerGradients[hashLabel(label) % bannerGradients.length];
 }
 
 export function getUserInitials(label: string) {

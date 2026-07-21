@@ -1,9 +1,10 @@
-import { eventImageUrl } from './event-data';
+import { categoryAccentsLight, eventImageUrl } from './event-data';
 import { mapCenterCoordinates } from './filter-utils';
 import { palette } from './palette';
 import type { EventItem } from './types';
 
 const mapboxAccessToken = process.env.EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN ?? '';
+const MARKER_BORDER_OPACITY = 0.5;
 
 export type MapEvent = Pick<
   EventItem,
@@ -34,11 +35,28 @@ export function toMapEvent(event: MapEvent) {
     title: event.title,
     icon: event.icon,
     accent: event.accent,
+    // Lighter, more vibrant take on the category accent — used for the
+    // group pin border so groups pop against the map instead of reading flat.
+    accentLight: categoryAccentsLight[event.category],
     going: event.going,
     coordinates: event.coordinates,
     // Groups stay icon-only; events get a real photo on the pin.
     photoUrl: event.kind === 'group' ? null : eventImageUrl(event),
   };
+}
+
+function hexToRgba(hex: string, opacity: number) {
+  const value = hex.replace('#', '');
+
+  if (value.length !== 6) {
+    return hex;
+  }
+
+  const red = parseInt(value.slice(0, 2), 16);
+  const green = parseInt(value.slice(2, 4), 16);
+  const blue = parseInt(value.slice(4, 6), 16);
+
+  return `rgba(${red}, ${green}, ${blue}, ${opacity})`;
 }
 
 export function createMapboxMapHtml(events: MapEvent[]) {
@@ -94,7 +112,7 @@ export function createMapboxMapHtml(events: MapEvent[]) {
         background-color: #ffffff;
         background-position: center;
         background-size: cover;
-        border-color: ${palette.primary};
+        border-color: ${hexToRgba(palette.primaryEnd, MARKER_BORDER_OPACITY)};
         border-radius: 16px;
         border-style: solid;
         border-width: 2.5px;
@@ -165,12 +183,12 @@ export function createMapboxMapHtml(events: MapEvent[]) {
 
       .event-cluster .event-pin {
         background-color: #ffffff;
-        border-color: ${palette.ink};
+        border-color: ${hexToRgba(palette.primary, MARKER_BORDER_OPACITY)};
       }
 
       .event-cluster .event-pin-group {
         background-color: rgba(255, 255, 255, 0.55);
-        border-color: ${palette.ink};
+        border-color: ${hexToRgba(palette.primary, MARKER_BORDER_OPACITY)};
       }
 
       .event-map-marker:active {
@@ -223,15 +241,35 @@ export function createMapboxMapHtml(events: MapEvent[]) {
         errorElement.style.display = 'flex';
       }
 
-      function selectEvent(eventId) {
-        const message = JSON.stringify({ type: 'retalk-map-event-select', eventId });
+      function postHostMessage(message) {
+        const payload = JSON.stringify(message);
 
         if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-          window.ReactNativeWebView.postMessage(message);
+          window.ReactNativeWebView.postMessage(payload);
           return;
         }
 
-        window.parent && window.parent.postMessage(message, '*');
+        window.parent && window.parent.postMessage(payload, '*');
+      }
+
+      function selectEvent(eventId) {
+        postHostMessage({ type: 'retalk-map-event-select', eventId });
+      }
+
+      // Lets the host know exactly which events are currently on screen, so
+      // it can limit the category chip row (and its counts) to what's
+      // actually visible instead of every category anywhere in the dataset.
+      // Sent from renderMarkers() itself — using the very same on-screen
+      // event list it just drew markers for — rather than recomputed from
+      // map.getBounds(): with the camera pitched, getBounds() returns a
+      // lng/lat box stretched out to the horizon that includes far more
+      // than what's actually on screen, which is why the chip row wasn't
+      // shrinking as pins scrolled out of view.
+      function postVisibleEventsUpdate(eventsInView) {
+        postHostMessage({
+          type: 'retalk-map-visible-events',
+          eventIds: eventsInView.map((event) => event.id),
+        });
       }
 
       function createUserLocationCollection(location) {
@@ -273,6 +311,20 @@ export function createMapboxMapHtml(events: MapEvent[]) {
 
       function formatCount(value) {
         return value > 99 ? '99+' : String(value);
+      }
+
+      function hexToRgba(hex, opacity) {
+        const value = hex.replace('#', '');
+
+        if (value.length !== 6) {
+          return hex;
+        }
+
+        const red = parseInt(value.slice(0, 2), 16);
+        const green = parseInt(value.slice(2, 4), 16);
+        const blue = parseInt(value.slice(4, 6), 16);
+
+        return 'rgba(' + red + ', ' + green + ', ' + blue + ', ' + opacity + ')';
       }
 
       function getMapPinZIndex(event) {
@@ -422,9 +474,10 @@ export function createMapboxMapHtml(events: MapEvent[]) {
         }
 
         if (isGroup) {
-          // Groups carry their category color on the border; events stay on
-          // the uniform theme-purple border set by .event-pin in CSS.
-          markerElement.style.borderColor = event.accent;
+          // Groups carry a lighter, more vibrant take on their category
+          // color on the border; events stay on the uniform theme-purple
+          // border set by .event-pin in CSS.
+          markerElement.style.borderColor = hexToRgba(event.accentLight, ${MARKER_BORDER_OPACITY});
           markerElement.style.backgroundColor = event.accent + '26';
           markerElement.textContent = event.icon;
           markerElement.append(buildMemberBadge(event));
@@ -472,7 +525,7 @@ export function createMapboxMapHtml(events: MapEvent[]) {
         markerElement.className = 'event-map-marker ' + (isGroup ? 'event-pin-group' : 'event-pin');
 
         if (isGroup) {
-          markerElement.style.borderColor = primary.accent;
+          markerElement.style.borderColor = hexToRgba(primary.accentLight, ${MARKER_BORDER_OPACITY});
           markerElement.style.backgroundColor = primary.accent + '26';
           markerElement.textContent = primary.icon;
         } else {
@@ -531,10 +584,42 @@ export function createMapboxMapHtml(events: MapEvent[]) {
         // freshly-individual pin flying out from the old shared point.
         let prevMemberPixel = new Map();
 
+        // Buffer (px) added around the canvas edges before a pin counts as
+        // "in view" — avoids pins right at the edge flickering in and out
+        // on tiny sub-pixel camera moves.
+        const VIEWPORT_EDGE_PADDING = 40;
+
         function renderMarkers() {
+          // Only cluster/render pins currently inside the viewport — the
+          // rest sit outside the field of view, so there's no reason to
+          // keep their marker elements mounted (or let them factor into
+          // clustering) until a pan/zoom brings them back on screen.
+          //
+          // This checks projected screen-space position rather than
+          // map.getBounds(): the camera is pitched, so getBounds() returns a
+          // lng/lat box stretched out toward the horizon that's much bigger
+          // than what's actually on screen.
+          const canvas = map.getCanvas();
+          const viewportWidth = canvas.clientWidth;
+          const viewportHeight = canvas.clientHeight;
+          const pixelPositions = new Map();
+          const eventsInView = mapEvents.filter((event) => {
+            const pixel = map.project(displayCoordinates.get(event.id) || event.coordinates);
+            pixelPositions.set(event.id, pixel);
+
+            return (
+              pixel.x >= -VIEWPORT_EDGE_PADDING &&
+              pixel.x <= viewportWidth + VIEWPORT_EDGE_PADDING &&
+              pixel.y >= -VIEWPORT_EDGE_PADDING &&
+              pixel.y <= viewportHeight + VIEWPORT_EDGE_PADDING
+            );
+          });
+
+          postVisibleEventsUpdate(eventsInView);
+
           const clusters = clusterPoints(
-            mapEvents,
-            (event) => map.project(displayCoordinates.get(event.id) || event.coordinates),
+            eventsInView,
+            (event) => pixelPositions.get(event.id),
             (a, b) => Math.hypot(a.x - b.x, a.y - b.y) <= CLUSTER_PIXEL_RADIUS,
             (event, cluster) => event.kind === cluster[0].kind
           );

@@ -35,7 +35,9 @@ export default function OnboardingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const user = useSessionStore((state) => state.user);
+  const completedOnboardingUserIds = useSessionStore((state) => state.completedOnboardingUserIds);
   const completeOnboarding = useSessionStore((state) => state.completeOnboarding);
+  const isEditing = Boolean(user && completedOnboardingUserIds.includes(user.id));
   const [stepIndex, setStepIndex] = useState(0);
   const [name, setName] = useState(user?.name ?? '');
   const [neighborhood, setNeighborhood] = useState(user?.homeNeighborhood ?? '');
@@ -93,13 +95,14 @@ export default function OnboardingScreen() {
         >
           <YStack gap={16}>
             <YStack gap={4}>
-              <SectionLabel>Welcome</SectionLabel>
+              <SectionLabel>{isEditing ? 'Edit profile' : 'Welcome'}</SectionLabel>
               <Text fontSize={28} lineHeight={34} fontWeight="800" color={palette.ink}>
-                Shape your event map.
+                {isEditing ? 'Update your details.' : 'Shape your event map.'}
               </Text>
               <Text fontSize={14} lineHeight={22} color={palette.gray}>
-                Pick a neighborhood, categories, and social rhythm so ReTalk can start with
-                better local matches.
+                {isEditing
+                  ? 'Change your name, neighborhood, categories, and social rhythm.'
+                  : 'Pick a neighborhood, categories, and social rhythm so ReTalk can start with better local matches.'}
               </Text>
             </YStack>
 

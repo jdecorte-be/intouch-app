@@ -1,11 +1,16 @@
-import { formatChatTimestamp } from './date-utils';
-import { mockChatThreads, mockNotifications } from './mock-data';
-import type { ChatMessage, ChatThread, EventItem, HostableCategory, NotificationItem, SessionUser } from './types';
+import { palette } from './palette';
+import type {
+  ChatMessage,
+  ChatThread,
+  EventItem,
+  HostableCategory,
+  NotificationItem,
+  NotificationKind,
+  SessionUser,
+} from './types';
 
-// Single seam between the UI and the data source. Events/groups and auth come
-// from the retalk.live Next.js backend; everything else still serves mock
-// data until its own endpoint lands, and the stores/screens stay untouched
-// either way.
+// Single seam between the UI and the data source: every read/write goes
+// through the retalk.live Next.js backend.
 
 const NETWORK_DELAY_MS = 250;
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://retalk.live';
@@ -168,12 +173,50 @@ export async function signOutRemote(token: string): Promise<void> {
   }).catch(() => {});
 }
 
-export async function fetchChatThreads(): Promise<ChatThread[]> {
-  return delay(mockChatThreads);
+// The icon/color pairing for a notification is a presentation concern tied
+// to its kind, not something the backend needs to own.
+const notificationStyleByKind: Record<
+  NotificationKind,
+  { icon: NotificationItem['icon']; iconColor: string; iconBackground: string }
+> = {
+  comment: { icon: 'MessageCircleDots', iconColor: palette.primary, iconBackground: palette.primarySoft },
+  generated: { icon: 'Sparkles', iconColor: palette.warnText, iconBackground: palette.warnSoft },
+  invite: { icon: 'UserPlus', iconColor: palette.green, iconBackground: palette.tealSoft },
+  like: { icon: 'Heart', iconColor: palette.coral, iconBackground: palette.coralSoft },
+};
+
+function toNotification(raw: any): NotificationItem {
+  const style = notificationStyleByKind[raw.kind as NotificationKind];
+
+  return {
+    id: raw.id,
+    actor: raw.actor,
+    time: raw.time,
+    title: raw.title,
+    detail: raw.detail ?? undefined,
+    unread: Boolean(raw.unread),
+    kind: raw.kind,
+    eventId: raw.eventId ?? undefined,
+    icon: style.icon,
+    iconColor: style.iconColor,
+    iconBackground: style.iconBackground,
+    inviteStatus: raw.inviteStatus,
+  };
 }
 
-export async function fetchNotifications(): Promise<NotificationItem[]> {
-  return delay(mockNotifications);
+export async function fetchNotifications(token: string): Promise<NotificationItem[]> {
+  const response = await fetch(`${API_BASE_URL}/api/mobile/notifications`, {
+    headers: authHeaders(token),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch notifications: ${response.status}`);
+  }
+
+  const body = await response.json();
+  const notifications = body.notifications ?? body;
+
+  return (notifications as any[]).map(toNotification);
 }
 
 export async function toggleEventInterest(
@@ -183,54 +226,161 @@ export async function toggleEventInterest(
   return delay(next);
 }
 
-export async function joinEventChat(event: EventItem): Promise<ChatThread> {
-  return delay({
-    id: `event-chat-${event.id}`,
-    kind: 'event' as const,
+function initialsFrom(name: string) {
+  return name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => word[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
+function authHeaders(token: string) {
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+}
+
+// The mobile chat endpoints return thread/message objects that are already
+// shaped close to ChatThread/ChatMessage; these mappers just fill in
+// client-only fallbacks (initials, accent) so the rest of the app never has
+// to guard against missing fields.
+function toChatMessage(raw: any): ChatMessage {
+  return {
+    id: raw.id,
+    author: raw.author,
+    authorImage: raw.authorImage ?? null,
+    fromSelf: Boolean(raw.fromSelf),
+    text: raw.text,
+    sentAt: raw.sentAt,
+  };
+}
+
+function toChatThread(raw: any): ChatThread {
+  const title: string = raw.title;
+
+  return {
+    id: raw.id,
+    kind: raw.kind,
+    title,
+    subtitle: raw.subtitle ?? '',
+    accent: raw.accent ?? '#5b6b82',
+    initials: raw.initials ?? initialsFrom(title),
+    avatarImage: raw.avatarImage ?? null,
+    unreadCount: raw.unreadCount ?? 0,
+    pinned: raw.pinned,
+    tags: raw.tags,
+    eventId: raw.eventId ?? undefined,
+    messages: Array.isArray(raw.messages) ? raw.messages.map(toChatMessage) : [],
+  };
+}
+
+export async function fetchChatThreads(token: string): Promise<ChatThread[]> {
+  const response = await fetch(`${API_BASE_URL}/api/mobile/chats`, {
+    headers: authHeaders(token),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch chats: ${response.status}`);
+  }
+
+  const body = await response.json();
+  const threads = body.chats ?? body.threads ?? body;
+
+  return (threads as any[]).map(toChatThread);
+}
+
+export async function fetchChatThread(threadId: string, token: string): Promise<ChatThread> {
+  const response = await fetch(`${API_BASE_URL}/api/mobile/chats/${threadId}`, {
+    headers: authHeaders(token),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch chat: ${response.status}`);
+  }
+
+  const body = await response.json();
+  const thread = body.chat ?? body.thread ?? body;
+  const messages = body.messages ?? thread.messages ?? [];
+
+  return toChatThread({ ...thread, messages });
+}
+
+export async function joinEventChat(event: EventItem, token: string): Promise<ChatThread> {
+  const response = await fetch(`${API_BASE_URL}/api/mobile/chats/join`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ eventId: event.id }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to join event chat: ${response.status}`);
+  }
+
+  const body = await response.json();
+  const thread = body.chat ?? body.thread ?? body;
+
+  return toChatThread({
+    kind: 'event',
     title: event.title,
     subtitle: `${event.going} members · ${event.neighborhood}`,
     accent: event.accent,
-    initials: event.title
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((word) => word[0]?.toUpperCase() ?? '')
-      .join(''),
-    unreadCount: 0,
-    messages: [],
+    eventId: event.id,
+    ...thread,
   });
 }
 
 export async function startDirectChat(
   memberName: string,
   memberUserId: string,
+  token: string,
+  eventId?: string,
 ): Promise<ChatThread> {
-  return delay({
-    id: `direct-${memberUserId}`,
-    kind: 'direct' as const,
+  const response = await fetch(`${API_BASE_URL}/api/mobile/chats/direct`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ member: memberName, memberUserId, eventId }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to start chat: ${response.status}`);
+  }
+
+  const body = await response.json();
+  const thread = body.chat ?? body.thread ?? body;
+
+  return toChatThread({
+    kind: 'direct',
     title: memberName,
     subtitle: 'Direct message',
-    accent: '#5b6b82',
-    initials: memberName
-      .split(/\s+/)
-      .slice(0, 2)
-      .map((word) => word[0]?.toUpperCase() ?? '')
-      .join(''),
-    unreadCount: 0,
-    messages: [],
+    ...thread,
   });
 }
 
 export async function sendChatMessage(
   chatId: string,
   text: string,
-  author: string,
+  token: string,
 ): Promise<ChatMessage> {
-  return delay({
-    id: `${chatId}-${Date.now()}`,
-    author,
-    authorImage: null,
-    fromSelf: true,
-    text,
-    sentAt: formatChatTimestamp(new Date()),
+  const response = await fetch(`${API_BASE_URL}/api/mobile/chats/${chatId}/messages`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ text }),
   });
+
+  if (!response.ok) {
+    throw new Error(`Failed to send message: ${response.status}`);
+  }
+
+  const body = await response.json();
+
+  return toChatMessage(body.message ?? body);
+}
+
+export async function markChatThreadRead(threadId: string, token: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/api/mobile/chats/${threadId}/read`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to mark chat read: ${response.status}`);
+  }
 }

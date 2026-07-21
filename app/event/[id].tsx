@@ -14,14 +14,13 @@ import { AvatarGroup, UserAvatar } from '@/components/ui/user-avatar';
 import { eventImageUrl } from '@/lib/event-data';
 import {
   getCategoryLabel,
-  getEventChatId,
   getEventHostAttendees,
   getEventInterestState,
   getItemNoun,
   splitStartsAt,
 } from '@/lib/event-utils';
 import { palette } from '@/lib/palette';
-import { getAttendeeKey, getUniqueTopics } from '@/lib/search-utils';
+import { getAttendeeKey, getPersonKey, getUniqueTopics } from '@/lib/search-utils';
 import { useChatStore } from '@/stores/chat-store';
 import { useEventsStore } from '@/stores/events-store';
 import { useSessionStore } from '@/stores/session-store';
@@ -139,7 +138,7 @@ export default function EventDetailScreen() {
   const relatedTopics = getUniqueTopics([categoryLabel, ...event.tags]);
   const hostAttendee = getEventHostAttendees(event)[0];
   const isViewerHost = Boolean(user?.id && hostAttendee?.userId === user.id);
-  const isJoined = threads.some((thread) => thread.id === getEventChatId(event.id));
+  const isJoined = threads.some((thread) => thread.kind === 'event' && thread.eventId === event.id);
   const [datePart, timePart] = splitStartsAt(event.startsAt);
   const displayTime = timePart ?? event.startsAt;
   const spotsLeft = Math.max(event.capacity - interest.going, 0);
@@ -149,13 +148,25 @@ export default function EventDetailScreen() {
   }));
 
   const openChat = async () => {
-    const chatId = await joinEventChat(event);
-    router.push(`/chat/${chatId}`);
+    try {
+      const chatId = await joinEventChat(event);
+      router.push(`/chat/${chatId}`);
+    } catch {
+      Alert.alert("Couldn't join chat", 'Please try again.');
+    }
   };
 
   const messageMember = async (memberName: string, memberUserId: string) => {
-    const chatId = await startDirectChat(memberName, memberUserId);
-    router.push(`/chat/${chatId}`);
+    try {
+      const chatId = await startDirectChat(memberName, memberUserId, event.id);
+      router.push(`/chat/${chatId}`);
+    } catch {
+      Alert.alert("Couldn't start chat", 'Please try again.');
+    }
+  };
+
+  const openProfile = (attendee: (typeof event.attendees)[number]) => {
+    router.push(`/user/${encodeURIComponent(getPersonKey(attendee))}`);
   };
 
   const copyEventLink = async () => {
@@ -386,30 +397,34 @@ export default function EventDetailScreen() {
             <YStack gap={10}>
               {event.attendees.map((attendee, index) => (
                 <XStack key={getAttendeeKey(attendee, index)} alignItems="center" gap={12}>
-                  <UserAvatar
-                    label={attendee.name}
-                    image={attendee.image}
-                    size={40}
-                    borderColor={palette.line}
-                    borderWidth={1}
-                  />
-                  <YStack flex={1} minWidth={0}>
-                    <XStack alignItems="center" gap={6}>
-                      <Text fontSize={13} fontWeight="800" color={palette.ink} numberOfLines={1}>
-                        {attendee.name}
-                      </Text>
-                      {attendee.isHost ? (
-                        <View borderRadius={999} backgroundColor={palette.primary} paddingHorizontal={6} paddingVertical={2}>
-                          <Text fontSize={9} fontWeight="900" color="white">
-                            HOST
+                  <Pressable onPress={() => openProfile(attendee)} style={{ flex: 1, minWidth: 0 }}>
+                    <XStack alignItems="center" gap={12}>
+                      <UserAvatar
+                        label={attendee.name}
+                        image={attendee.image}
+                        size={40}
+                        borderColor={palette.line}
+                        borderWidth={1}
+                      />
+                      <YStack flex={1} minWidth={0}>
+                        <XStack alignItems="center" gap={6}>
+                          <Text fontSize={13} fontWeight="800" color={palette.ink} numberOfLines={1}>
+                            {attendee.name}
                           </Text>
-                        </View>
-                      ) : null}
+                          {attendee.isHost ? (
+                            <View borderRadius={999} backgroundColor={palette.primary} paddingHorizontal={6} paddingVertical={2}>
+                              <Text fontSize={9} fontWeight="900" color="white">
+                                HOST
+                              </Text>
+                            </View>
+                          ) : null}
+                        </XStack>
+                        <Text fontSize={11} fontWeight="600" color={palette.muted} numberOfLines={1}>
+                          {attendee.role}
+                        </Text>
+                      </YStack>
                     </XStack>
-                    <Text fontSize={11} fontWeight="600" color={palette.muted} numberOfLines={1}>
-                      {attendee.role}
-                    </Text>
-                  </YStack>
+                  </Pressable>
                   {attendee.userId && attendee.userId !== user?.id ? (
                     <Pressable onPress={() => messageMember(attendee.name, attendee.userId!)}>
                       <View

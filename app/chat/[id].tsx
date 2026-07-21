@@ -22,13 +22,15 @@ export default function ChatConversationScreen() {
   const thread = useChatStore((state) => state.threads.find((candidate) => candidate.id === id));
   const sendMessage = useChatStore((state) => state.sendMessage);
   const markThreadRead = useChatStore((state) => state.markThreadRead);
+  const loadThreadMessages = useChatStore((state) => state.loadThreadMessages);
   const user = useSessionStore((state) => state.user);
 
   useEffect(() => {
     if (id) {
       markThreadRead(id);
+      void loadThreadMessages(id);
     }
-  }, [id, markThreadRead]);
+  }, [id, markThreadRead, loadThreadMessages]);
 
   useEffect(() => {
     const timeout = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);

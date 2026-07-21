@@ -100,12 +100,3 @@ export function eventMatchesSelectedDay(event: EventItem, selectedDayKey: string
   return event.startsAtKey === selectedDayKey;
 }
 
-export function getEventIdFromChatThread(threadId: string) {
-  const prefix = 'event-chat-';
-
-  return threadId.startsWith(prefix) ? threadId.slice(prefix.length) : null;
-}
-
-export function getEventChatId(eventId: string) {
-  return `event-chat-${eventId}`;
-}

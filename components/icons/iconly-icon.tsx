@@ -23,6 +23,8 @@ const iconMap = {
   Edit: Iconsax.Edit,
   ExportSquare: Iconsax.ExportSquare,
   Filter: Iconsax.Filter,
+  FingerScan: Iconsax.FingerScan,
+  Grid: Iconsax.Grid5,
   Group: Iconsax.People,
   Heart: Iconsax.Heart,
   History: Iconsax.Refresh2,

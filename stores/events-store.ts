@@ -16,7 +16,6 @@ import {
   getEventPriceValueCad,
   mapCenterCoordinates,
 } from '@/lib/filter-utils';
-import { mockEvents } from '@/lib/mock-data';
 import { zustandStorage } from '@/lib/storage';
 import type { ActivityScope, EventCategory, EventInterestState, EventItem } from '@/lib/types';
 
@@ -87,15 +86,14 @@ export const useEventsStore = create<EventsState>()(
             loadError: null,
             isUsingFallbackEvents: false,
           });
-        } catch {
-          const hasExistingEvents = get().events.length > 0;
+        } catch (error) {
+          console.error('fetchEvents failed:', error);
 
           set({
-            events: hasExistingEvents ? get().events : mockEvents,
             isLoading: false,
             hasLoaded: true,
             loadError: 'Live events are unavailable right now.',
-            isUsingFallbackEvents: !hasExistingEvents,
+            isUsingFallbackEvents: false,
           });
         }
       },
@@ -184,36 +182,35 @@ export const useEventsStore = create<EventsState>()(
   ),
 );
 
+function matchesNonCategoryFilters(event: EventItem, state: EventsState): boolean {
+  const matchesScope =
+    state.activityScope === 'popular'
+      ? true
+      : state.activityScope === 'groups'
+        ? event.kind === 'group'
+        : event.kind === 'event';
+  const matchesDay = eventMatchesSelectedDay(event, state.selectedDayKey);
+  const matchesDistance =
+    state.maxDistanceKm >= DISTANCE_FILTER_MAX_KM ||
+    getDistanceKm(mapCenterCoordinates, event.coordinates) <= state.maxDistanceKm;
+  const matchesPrice =
+    state.maxPriceCad >= PRICE_FILTER_MAX_CAD ||
+    getEventPriceValueCad(event.price) <= state.maxPriceCad;
+  const matchesGroupSize =
+    state.maxGroupSize >= GROUP_SIZE_FILTER_MAX || event.capacity <= state.maxGroupSize;
+  const matchesHappeningNow = !state.happeningNowOnly || isHappeningNow(event);
+
+  return (
+    matchesScope && matchesDay && matchesDistance && matchesPrice && matchesGroupSize && matchesHappeningNow
+  );
+}
+
 export function selectVisibleEvents(state: EventsState): EventItem[] {
   const scopedEvents = state.events.filter((event) => {
-    const matchesScope =
-      state.activityScope === 'popular'
-        ? true
-        : state.activityScope === 'groups'
-          ? event.kind === 'group'
-          : event.kind === 'event';
     const matchesCategory =
       state.activeCategory === 'featured' || event.category === state.activeCategory;
-    const matchesDay = eventMatchesSelectedDay(event, state.selectedDayKey);
-    const matchesDistance =
-      state.maxDistanceKm >= DISTANCE_FILTER_MAX_KM ||
-      getDistanceKm(mapCenterCoordinates, event.coordinates) <= state.maxDistanceKm;
-    const matchesPrice =
-      state.maxPriceCad >= PRICE_FILTER_MAX_CAD ||
-      getEventPriceValueCad(event.price) <= state.maxPriceCad;
-    const matchesGroupSize =
-      state.maxGroupSize >= GROUP_SIZE_FILTER_MAX || event.capacity <= state.maxGroupSize;
-    const matchesHappeningNow = !state.happeningNowOnly || isHappeningNow(event);
 
-    return (
-      matchesScope &&
-      matchesCategory &&
-      matchesDay &&
-      matchesDistance &&
-      matchesPrice &&
-      matchesGroupSize &&
-      matchesHappeningNow
-    );
+    return matchesCategory && matchesNonCategoryFilters(event, state);
   });
 
   if (state.activityScope === 'popular') {
@@ -221,4 +218,30 @@ export function selectVisibleEvents(state: EventsState): EventItem[] {
   }
 
   return scopedEvents;
+}
+
+// Per-category marker counts among events passing every filter except
+// category itself and currently rendered on screen (per the map's own
+// on-screen pixel-projection check — see postVisibleEventsUpdate in
+// mapbox-map-html.ts), so the chip row tracks what's actually visible in
+// the current view (with how many pins) as the user pans/zooms.
+export function selectVisibleCategoryCounts(
+  state: EventsState,
+  visibleEventIds?: ReadonlySet<string> | null,
+): Partial<Record<EventCategory, number>> {
+  const counts: Partial<Record<EventCategory, number>> = {};
+
+  for (const event of state.events) {
+    if (!matchesNonCategoryFilters(event, state)) {
+      continue;
+    }
+
+    if (visibleEventIds && !visibleEventIds.has(event.id)) {
+      continue;
+    }
+
+    counts[event.category] = (counts[event.category] ?? 0) + 1;
+  }
+
+  return counts;
 }

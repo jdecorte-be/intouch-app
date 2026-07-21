@@ -1,14 +1,19 @@
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView } from 'react-native';
+import { Alert, Pressable, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, View, XStack, YStack } from 'tamagui';
 
+import { SearchBar } from '@/components/events/search-bar';
 import { IconlyIcon } from '@/components/icons/iconly-icon';
+import { UserAvatar } from '@/components/ui/user-avatar';
 import { palette } from '@/lib/palette';
+import type { PersonSearchResult } from '@/lib/search-utils';
+import { searchPeople } from '@/lib/search-utils';
 import type { ChatFilterTag } from '@/lib/types';
 import { useChatStore } from '@/stores/chat-store';
+import { useEventsStore } from '@/stores/events-store';
 
 type ChatFilterKey = 'all' | 'groups' | ChatFilterTag;
 
@@ -25,16 +30,48 @@ export default function ChatsScreen() {
   const insets = useSafeAreaInsets();
   const threads = useChatStore((state) => state.threads);
   const markThreadRead = useChatStore((state) => state.markThreadRead);
+  const startDirectChat = useChatStore((state) => state.startDirectChat);
   const error = useChatStore((state) => state.error);
   const dismissError = useChatStore((state) => state.dismissError);
+  const events = useEventsStore((state) => state.events);
   const [selectedFilter, setSelectedFilter] = useState<ChatFilterKey>('all');
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const openThread = (chatId: string) => {
     markThreadRead(chatId);
     router.push(`/chat/${chatId}`);
   };
 
-  const shortcutThreads = threads.slice(0, 8);
+  const openSearch = () => setIsSearching(true);
+
+  const closeSearch = () => {
+    setIsSearching(false);
+    setSearchQuery('');
+  };
+
+  const userResults = useMemo(
+    () => (searchQuery.trim() ? searchPeople(events, searchQuery) : []),
+    [events, searchQuery],
+  );
+
+  const messagePerson = async (person: PersonSearchResult) => {
+    if (!person.userId) {
+      closeSearch();
+      router.push(`/user/${encodeURIComponent(person.key)}`);
+      return;
+    }
+
+    try {
+      const chatId = await startDirectChat(person.name, person.userId);
+      closeSearch();
+      router.push(`/chat/${chatId}`);
+    } catch {
+      Alert.alert("Couldn't start chat", 'Please try again.');
+    }
+  };
+
+  const shortcutThreads = threads.filter((thread) => thread.kind === 'direct').slice(0, 8);
 
   const visibleThreads = useMemo(() => {
     const filtered = threads.filter((thread) => {
@@ -48,45 +85,99 @@ export default function ChatsScreen() {
 
   return (
     <View flex={1} backgroundColor={palette.white}>
-      <XStack
-        alignItems="center"
-        justifyContent="space-between"
-        paddingHorizontal={16}
-        paddingTop={insets.top + 8}
-        paddingBottom={6}
-      >
-        <Text fontSize={28} fontWeight="800" color={palette.ink}>
-          Chats
-        </Text>
-        <XStack alignItems="center" gap={20}>
-          <IconlyIcon name="Search" size={22} color={palette.ink} />
+      {isSearching ? (
+        <XStack
+          alignItems="center"
+          gap={10}
+          paddingHorizontal={16}
+          paddingTop={insets.top + 8}
+          paddingBottom={10}
+        >
+          <Pressable onPress={closeSearch} hitSlop={8} accessibilityRole="button" accessibilityLabel="Close search">
+            <View width={36} height={36} borderRadius={18} alignItems="center" justifyContent="center">
+              <IconlyIcon name="ArrowLeft" size={18} color={palette.ink} />
+            </View>
+          </Pressable>
+          <View flex={1}>
+            <SearchBar
+              query={searchQuery}
+              placeholder="Search people"
+              autoFocus
+              onQueryChange={setSearchQuery}
+            />
+          </View>
         </XStack>
-      </XStack>
+      ) : (
+        <XStack
+          alignItems="center"
+          justifyContent="space-between"
+          paddingHorizontal={16}
+          paddingTop={insets.top + 8}
+          paddingBottom={6}
+        >
+          <Text fontSize={28} fontWeight="800" color={palette.ink}>
+            Chats
+          </Text>
+          <XStack alignItems="center" gap={20}>
+            <Pressable onPress={openSearch} hitSlop={8} accessibilityRole="button" accessibilityLabel="Search people">
+              <IconlyIcon name="Search" size={22} color={palette.ink} />
+            </Pressable>
+          </XStack>
+        </XStack>
+      )}
 
+      {isSearching ? (
+        <ScrollView
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 40 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {searchQuery.trim() === '' ? (
+            <YStack alignItems="center" paddingTop={60} gap={4}>
+              <Text fontSize={14} fontWeight="700" color={palette.ink}>
+                Find people to message
+              </Text>
+              <Text fontSize={13} color={palette.gray}>
+                Search by name.
+              </Text>
+            </YStack>
+          ) : userResults.length === 0 ? (
+            <YStack alignItems="center" paddingTop={60} gap={4}>
+              <Text fontSize={14} fontWeight="700" color={palette.ink}>
+                No people found
+              </Text>
+              <Text fontSize={13} color={palette.gray}>
+                Try a different name.
+              </Text>
+            </YStack>
+          ) : (
+            <YStack gap={2} paddingTop={8}>
+              {userResults.map((person) => (
+                <Pressable key={person.key} onPress={() => messagePerson(person)}>
+                  <XStack alignItems="center" gap={12} borderRadius={18} padding={10}>
+                    <UserAvatar label={person.name} image={person.image} size={48} />
+                    <YStack flex={1} minWidth={0} gap={3}>
+                      <Text fontSize={14} fontWeight="800" color={palette.ink} numberOfLines={1}>
+                        {person.name}
+                      </Text>
+                      <Text fontSize={12} fontWeight="600" color={palette.gray} numberOfLines={1}>
+                        {person.role} · {person.event.title}
+                      </Text>
+                    </YStack>
+                    <IconlyIcon name="MessageCircleDots" size={18} color={palette.primary} />
+                  </XStack>
+                </Pressable>
+              ))}
+            </YStack>
+          )}
+        </ScrollView>
+      ) : (
+        <>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         style={{ flexGrow: 0 }}
         contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 16, gap: 16 }}
       >
-        <Pressable onPress={() => router.navigate('/profile')}>
-          <YStack alignItems="center" gap={6} width={60}>
-            <View
-              width={60}
-              height={60}
-              borderRadius={18}
-              alignItems="center"
-              justifyContent="center"
-              backgroundColor={palette.fog}
-              style={{ borderWidth: 2, borderColor: palette.silver, borderStyle: 'dashed' }}
-            >
-              <IconlyIcon name="Plus" size={20} color={palette.slate} />
-            </View>
-            <Text fontSize={12} fontWeight="600" color={palette.ink} numberOfLines={1}>
-              You
-            </Text>
-          </YStack>
-        </Pressable>
         {shortcutThreads.map((thread) => {
           const firstName = thread.title.split(' ')[0] ?? thread.title;
 
@@ -348,6 +439,8 @@ export default function ChatsScreen() {
           </ScrollView>
         )}
       </View>
+        </>
+      )}
     </View>
   );
 }

@@ -84,6 +84,7 @@ export type ChatThread = {
   unreadCount: number;
   pinned?: boolean;
   tags?: ChatFilterTag[];
+  eventId?: string;
   messages: ChatMessage[];
 };
 

@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { Pressable, ScrollView } from 'react-native';
 import { Text, View, XStack, YStack } from 'tamagui';
@@ -24,6 +25,7 @@ import { selectVisibleEvents, useEventsStore } from '@/stores/events-store';
 import { useSessionStore } from '@/stores/session-store';
 
 function SuggestionList({ onSelectEvent }: { onSelectEvent: (eventId: string) => void }) {
+  const router = useRouter();
   const events = useEventsStore((state) => state.events);
   const query = useEventsStore((state) => state.query);
   const suggestions = useMemo(() => getSearchSuggestions(events, query), [events, query]);
@@ -40,7 +42,10 @@ function SuggestionList({ onSelectEvent }: { onSelectEvent: (eventId: string) =>
     <YStack gap={4} paddingTop={12}>
       {suggestions.map((suggestion) =>
         suggestion.type === 'user' ? (
-          <Pressable key={suggestion.id} onPress={() => onSelectEvent(suggestion.event.id)}>
+          <Pressable
+            key={suggestion.id}
+            onPress={() => router.push(`/user/${encodeURIComponent(suggestion.id)}`)}
+          >
             <XStack alignItems="center" gap={12} borderRadius={16} padding={10}>
               <UserAvatar label={suggestion.name} image={suggestion.image} size={44} />
               <YStack flex={1} minWidth={0}>

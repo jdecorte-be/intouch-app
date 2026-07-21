@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Keyboard, Pressable, ScrollView, useWindowDimensions } from 'react-native';
+import { Alert, Keyboard, Pressable, ScrollView, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
@@ -210,7 +210,10 @@ export default function HomeScreen() {
   const restEvents = sortedEvents.slice(HERO_CARD_LIMIT);
   const nearbyEvents = restEvents.slice(0, NEARBY_LIMIT);
   const trendingEvents = restEvents.slice(NEARBY_LIMIT, NEARBY_LIMIT + 3);
-  const featuredAttendees = useMemo(() => getFeaturedAttendees(events, 10), [events]);
+  const featuredAttendees = useMemo(
+    () => getFeaturedAttendees(events, 10).filter((attendee) => attendee.key !== user?.id),
+    [events, user?.id],
+  );
   const normalizedSearchQuery = normalizeSearchValue(searchQuery);
   const searchEvents = useMemo(
     () =>
@@ -295,8 +298,12 @@ export default function HomeScreen() {
     });
 
   const joinEvent = async (event: EventItem) => {
-    const chatId = await joinEventChat(event);
-    router.push(`/chat/${chatId}`);
+    try {
+      const chatId = await joinEventChat(event);
+      router.push(`/chat/${chatId}`);
+    } catch {
+      Alert.alert("Couldn't join chat", 'Please try again.');
+    }
   };
 
   return (
@@ -571,7 +578,10 @@ export default function HomeScreen() {
             contentContainerStyle={{ gap: 16, paddingHorizontal: 16, paddingTop: 20 }}
           >
             {featuredAttendees.map((attendee) => (
-              <Pressable key={attendee.key} onPress={() => openEvent(attendee.eventId)}>
+              <Pressable
+                key={attendee.key}
+                onPress={() => router.push(`/user/${encodeURIComponent(attendee.key)}`)}
+              >
                 <YStack alignItems="center" gap={6} width={60}>
                   <UserAvatar
                     label={attendee.name}

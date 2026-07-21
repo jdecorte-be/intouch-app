@@ -4,6 +4,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import * as api from '@/lib/api';
 import { zustandStorage } from '@/lib/storage';
 import type { ChatThread, EventItem } from '@/lib/types';
+import { useSessionStore } from '@/stores/session-store';
 
 type ChatState = {
   threads: ChatThread[];
@@ -11,14 +12,15 @@ type ChatState = {
   error: string | null;
 
   loadThreads: () => Promise<void>;
+  loadThreadMessages: (chatId: string) => Promise<void>;
   joinEventChat: (event: EventItem) => Promise<string>;
-  startDirectChat: (memberName: string, memberUserId: string) => Promise<string>;
+  startDirectChat: (memberName: string, memberUserId: string, eventId?: string) => Promise<string>;
   sendMessage: (chatId: string, text: string, author: string) => void;
   markThreadRead: (chatId: string) => void;
   dismissError: () => void;
 };
 
-function upsertThread(threads: ChatThread[], thread: ChatThread) {
+function upsertThread(threads: ChatThread[], thread: ChatThread, replaceMessages = false) {
   return threads.some((candidate) => candidate.id === thread.id)
     ? threads.map((candidate) =>
         candidate.id === thread.id
@@ -29,7 +31,12 @@ function upsertThread(threads: ChatThread[], thread: ChatThread) {
               accent: thread.accent,
               initials: thread.initials,
               avatarImage: thread.avatarImage ?? candidate.avatarImage,
-              messages: candidate.messages.length ? candidate.messages : thread.messages,
+              unreadCount: thread.unreadCount,
+              pinned: thread.pinned ?? candidate.pinned,
+              tags: thread.tags ?? candidate.tags,
+              eventId: thread.eventId ?? candidate.eventId,
+              messages:
+                replaceMessages || !candidate.messages.length ? thread.messages : candidate.messages,
             }
           : candidate,
       )
@@ -44,11 +51,18 @@ export const useChatStore = create<ChatState>()(
       error: null,
 
       loadThreads: async () => {
+        const token = useSessionStore.getState().token;
+
+        if (!token) {
+          set({ hasLoaded: true });
+          return;
+        }
+
         try {
-          const threads = await api.fetchChatThreads();
+          const threads = await api.fetchChatThreads(token);
           set((state) => ({
             // Keep any threads created locally before the fetch resolved.
-            threads: threads.reduce(upsertThread, state.threads),
+            threads: threads.reduce((acc, thread) => upsertThread(acc, thread), state.threads),
             hasLoaded: true,
           }));
         } catch {
@@ -58,21 +72,51 @@ export const useChatStore = create<ChatState>()(
         }
       },
 
-      joinEventChat: async (event) => {
-        const chatId = `event-chat-${event.id}`;
+      loadThreadMessages: async (chatId) => {
+        const token = useSessionStore.getState().token;
 
-        if (!get().threads.some((thread) => thread.id === chatId)) {
-          const thread = await api.joinEventChat(event);
-          set((state) => ({ threads: upsertThread(state.threads, thread) }));
+        if (!token) {
+          return;
         }
 
-        return chatId;
+        try {
+          const thread = await api.fetchChatThread(chatId, token);
+          set((state) => ({ threads: upsertThread(state.threads, thread, true) }));
+        } catch {
+          // Keep whatever messages are already cached locally for this thread.
+        }
       },
 
-      startDirectChat: async (memberName, memberUserId) => {
+      joinEventChat: async (event) => {
+        const token = useSessionStore.getState().token;
+        const existing = get().threads.find(
+          (thread) => thread.kind === 'event' && thread.eventId === event.id,
+        );
+
+        if (existing) {
+          return existing.id;
+        }
+
+        if (!token) {
+          throw new Error('You need to sign in to join this chat.');
+        }
+
+        const thread = await api.joinEventChat(event, token);
+        set((state) => ({ threads: upsertThread(state.threads, thread) }));
+
+        return thread.id;
+      },
+
+      startDirectChat: async (memberName, memberUserId, eventId) => {
         set({ error: null });
 
-        const thread = await api.startDirectChat(memberName, memberUserId);
+        const token = useSessionStore.getState().token;
+
+        if (!token) {
+          throw new Error('You need to sign in to start this chat.');
+        }
+
+        const thread = await api.startDirectChat(memberName, memberUserId, token, eventId);
         set((state) => ({ threads: upsertThread(state.threads, thread) }));
 
         return thread.id;
@@ -81,6 +125,7 @@ export const useChatStore = create<ChatState>()(
       sendMessage: (chatId, text, author) => {
         set({ error: null });
 
+        const token = useSessionStore.getState().token;
         const optimisticId = `${chatId}-${Date.now()}`;
         const optimisticMessage = {
           id: optimisticId,
@@ -108,7 +153,7 @@ export const useChatStore = create<ChatState>()(
           };
         });
 
-        api.sendChatMessage(chatId, text, author).catch(() => {
+        if (!token) {
           set((state) => ({
             error: "Your message didn't send. Try again.",
             threads: state.threads.map((thread) =>
@@ -120,17 +165,55 @@ export const useChatStore = create<ChatState>()(
                 : thread,
             ),
           }));
-        });
+          return;
+        }
+
+        api
+          .sendChatMessage(chatId, text, token)
+          .then((confirmedMessage) => {
+            set((state) => ({
+              threads: state.threads.map((thread) =>
+                thread.id === chatId
+                  ? {
+                      ...thread,
+                      messages: thread.messages.map((message) =>
+                        message.id === optimisticId ? confirmedMessage : message,
+                      ),
+                    }
+                  : thread,
+              ),
+            }));
+          })
+          .catch(() => {
+            set((state) => ({
+              error: "Your message didn't send. Try again.",
+              threads: state.threads.map((thread) =>
+                thread.id === chatId
+                  ? {
+                      ...thread,
+                      messages: thread.messages.filter((message) => message.id !== optimisticId),
+                    }
+                  : thread,
+              ),
+            }));
+          });
       },
 
-      markThreadRead: (chatId) =>
+      markThreadRead: (chatId) => {
         set((state) => ({
           threads: state.threads.map((thread) =>
             thread.id === chatId && thread.unreadCount > 0
               ? { ...thread, unreadCount: 0 }
               : thread,
           ),
-        })),
+        }));
+
+        const token = useSessionStore.getState().token;
+
+        if (token) {
+          api.markChatThreadRead(chatId, token).catch(() => {});
+        }
+      },
 
       dismissError: () => set({ error: null }),
     }),
@@ -149,9 +232,7 @@ export function selectUnreadCount(state: ChatState) {
 export function selectSubscribedEventIds(state: ChatState) {
   return new Set(
     state.threads.flatMap((thread) =>
-      thread.kind === 'event' && thread.id.startsWith('event-chat-')
-        ? [thread.id.slice('event-chat-'.length)]
-        : [],
+      thread.kind === 'event' && thread.eventId ? [thread.eventId] : [],
     ),
   );
 }

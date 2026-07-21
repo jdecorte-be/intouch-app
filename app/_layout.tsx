@@ -99,12 +99,13 @@ export default function RootLayout() {
               contentStyle: { backgroundColor: palette.white },
             }}
           >
-            <Stack.Protected guard={!!user && needsOnboarding}>
+            <Stack.Protected guard={!!user}>
               <Stack.Screen name="onboarding" />
             </Stack.Protected>
             <Stack.Protected guard={!!user && !needsOnboarding}>
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="event/[id]" />
+              <Stack.Screen name="user/[id]" />
               <Stack.Screen name="chat/[id]" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="host" options={{ presentation: 'modal' }} />
               <Stack.Screen name="filters" options={{ presentation: 'modal' }} />
