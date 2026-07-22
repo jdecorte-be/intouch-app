@@ -75,7 +75,12 @@ export default function OnboardingScreen() {
       eventInterests: interests,
       eventGoals: goals,
     });
-    router.replace('/');
+
+    if (isEditing) {
+      router.back();
+    } else {
+      router.replace('/');
+    }
   };
 
   return (
@@ -195,13 +200,19 @@ export default function OnboardingScreen() {
 
             <XStack alignItems="center" justifyContent="space-between" gap={12}>
               <Pressable
-                disabled={isFirstStep}
-                onPress={() => setStepIndex((current) => Math.max(current - 1, 0))}
-                style={[styles.navButton, styles.backButton, isFirstStep && styles.disabledButton]}
+                disabled={isFirstStep && !isEditing}
+                onPress={() => {
+                  if (isFirstStep && isEditing) {
+                    router.back();
+                    return;
+                  }
+                  setStepIndex((current) => Math.max(current - 1, 0));
+                }}
+                style={[styles.navButton, styles.backButton, isFirstStep && !isEditing && styles.disabledButton]}
               >
-                <IconlyIcon name="ArrowLeft" size={16} color={isFirstStep ? palette.muted : palette.ink} />
-                <Text fontSize={14} fontWeight="800" color={isFirstStep ? palette.muted : palette.ink}>
-                  Back
+                <IconlyIcon name="ArrowLeft" size={16} color={isFirstStep && !isEditing ? palette.muted : palette.ink} />
+                <Text fontSize={14} fontWeight="800" color={isFirstStep && !isEditing ? palette.muted : palette.ink}>
+                  {isFirstStep && isEditing ? 'Cancel' : 'Back'}
                 </Text>
               </Pressable>
 
@@ -214,7 +225,7 @@ export default function OnboardingScreen() {
                 style={[styles.navButton, styles.nextButton]}
               >
                 <Text fontSize={14} fontWeight="800" color={palette.white}>
-                  {isLastStep ? 'Finish setup' : 'Next'}
+                  {isLastStep ? (isEditing ? 'Save changes' : 'Finish setup') : 'Next'}
                 </Text>
                 <IconlyIcon name={isLastStep ? 'Check' : 'ChevronRight'} size={16} color={palette.white} />
               </Pressable>

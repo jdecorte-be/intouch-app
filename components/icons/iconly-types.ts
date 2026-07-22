@@ -20,8 +20,6 @@ export const iconlyIconNames = [
   'Edit',
   'ExportSquare',
   'Filter',
-  'FingerScan',
-  'Grid',
   'Group',
   'Heart',
   'History',

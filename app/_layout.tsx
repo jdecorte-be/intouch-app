@@ -111,8 +111,16 @@ export default function RootLayout() {
               <Stack.Screen name="filters" options={{ presentation: 'modal' }} />
             </Stack.Protected>
             <Stack.Protected guard={!user}>
-              <Stack.Screen name="login" />
-              <Stack.Screen name="register" />
+              <Stack.Screen
+                name="auth"
+                options={{
+                  animation: 'fade_from_bottom',
+                  animationDuration: 260,
+                  animationTypeForReplace: 'push',
+                }}
+              />
+              <Stack.Screen name="login" options={{ animation: 'none' }} />
+              <Stack.Screen name="register" options={{ animation: 'none' }} />
             </Stack.Protected>
           </Stack>
           <StatusBar style="dark" />

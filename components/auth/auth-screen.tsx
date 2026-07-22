@@ -1,7 +1,7 @@
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
-import { useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -11,6 +11,7 @@ import {
   TextInput,
   useWindowDimensions,
 } from 'react-native';
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { Text, View, XStack, YStack } from 'tamagui';
@@ -22,9 +23,19 @@ import { palette } from '@/lib/palette';
 import { appTextInputStyle } from '@/lib/typography';
 import { useSessionStore } from '@/stores/session-store';
 
+const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
 const GOOGLE_AUTH_REDIRECT_URL = 'retalkapp://auth-callback';
 
 type AuthMode = 'login' | 'register';
+
+type AuthFormValues = {
+  name: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+};
+
+const authModes = ['login', 'register'] as const;
 
 const authCopy = {
   login: {
@@ -32,7 +43,6 @@ const authCopy = {
     description: 'Enter your email below to login to your account',
     submit: 'Login',
     footerText: "Don't have an account?",
-    footerHref: '/register',
     footerLink: 'Sign up',
   },
   register: {
@@ -40,10 +50,33 @@ const authCopy = {
     description: 'Enter your details below to start discovering events',
     submit: 'Create account',
     footerText: 'Already have an account?',
-    footerHref: '/login',
     footerLink: 'Login',
   },
 } as const;
+
+function getRequestedAuthMode(mode: string | undefined, fallback: AuthMode) {
+  return mode === 'login' || mode === 'register' ? mode : fallback;
+}
+
+function getAuthValidationError(mode: AuthMode, values: AuthFormValues) {
+  if (mode === 'register' && !values.name.trim()) {
+    return 'Enter your name to continue.';
+  }
+
+  if (!values.email.trim() || !values.password) {
+    return 'Enter your email and password to continue.';
+  }
+
+  if (mode === 'register' && values.password.length < 8) {
+    return 'Use a password with at least 8 characters.';
+  }
+
+  if (mode === 'register' && values.password !== values.confirmPassword) {
+    return 'The passwords you entered do not match.';
+  }
+
+  return null;
+}
 
 function GoogleIcon() {
   return (
@@ -253,53 +286,272 @@ function AuthInput({
   );
 }
 
-export function AuthScreen({ mode }: { mode: AuthMode }) {
+function AuthModeTabs({
+  mode,
+  onChange,
+}: {
+  mode: AuthMode;
+  onChange: (mode: AuthMode) => void;
+}) {
+  return (
+    <XStack backgroundColor={palette.fog} borderRadius={999} padding={4}>
+      {authModes.map((item) => {
+        const isActive = item === mode;
+        return (
+          <Pressable
+            key={item}
+            onPress={() => onChange(item)}
+            style={styles.segmentButton}
+          >
+            <View
+              height={38}
+              alignItems="center"
+              justifyContent="center"
+              borderRadius={999}
+              backgroundColor={isActive ? 'white' : 'transparent'}
+              shadowColor="#0f172a"
+              shadowOpacity={isActive ? 0.05 : 0}
+              shadowRadius={12}
+              shadowOffset={{ width: 0, height: 4 }}
+            >
+              <Text fontSize={13} fontWeight="800" color={isActive ? palette.ink : palette.gray}>
+                {item === 'login' ? 'Login' : 'Register'}
+              </Text>
+            </View>
+          </Pressable>
+        );
+      })}
+    </XStack>
+  );
+}
+
+function AuthErrorMessage({ message }: { message: string | null }) {
+  if (!message) {
+    return null;
+  }
+
+  return (
+    <View borderRadius={8} borderWidth={1} borderColor="rgba(255,107,107,0.35)" backgroundColor={palette.dangerSoft} padding={12}>
+      <Text fontSize={13} fontWeight="700" color={palette.dangerText}>
+        {message}
+      </Text>
+    </View>
+  );
+}
+
+function AuthSubmitButton({
+  label,
+  isSubmitting,
+  animatedStyle,
+  onPress,
+  onPressIn,
+  onPressOut,
+}: {
+  label: string;
+  isSubmitting: boolean;
+  animatedStyle: object;
+  onPress: () => void;
+  onPressIn: () => void;
+  onPressOut: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      disabled={isSubmitting}
+    >
+      <AnimatedLinearGradient
+        colors={palette.primaryGradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[styles.submitButton, animatedStyle]}
+      >
+        <Text color="white" fontSize={14} fontWeight="800">
+          {isSubmitting ? 'Please wait...' : label}
+        </Text>
+      </AnimatedLinearGradient>
+    </Pressable>
+  );
+}
+
+function AuthDivider() {
+  return (
+    <XStack alignItems="center" gap={10}>
+      <View flex={1} height={1} backgroundColor="#dce5e2" />
+      <Text fontSize={13} color={palette.gray}>
+        Or continue with
+      </Text>
+      <View flex={1} height={1} backgroundColor="#dce5e2" />
+    </XStack>
+  );
+}
+
+function SocialAuthButton({
+  icon,
+  label,
+  disabled,
+  variant = 'outline',
+  onPress,
+}: {
+  icon: ReactNode;
+  label: string;
+  disabled: boolean;
+  variant?: 'outline' | 'soft';
+  onPress: () => void;
+}) {
+  const isSoft = variant === 'soft';
+
+  return (
+    <Pressable onPress={onPress} disabled={disabled}>
+      <XStack
+        height={44}
+        alignItems="center"
+        justifyContent="center"
+        gap={10}
+        borderRadius={999}
+        borderWidth={1}
+        borderColor={isSoft ? 'rgba(41,47,54,0.12)' : '#e6e8ec'}
+        backgroundColor={isSoft ? palette.fog : 'white'}
+        opacity={disabled ? 0.7 : 1}
+        shadowColor="#0f172a"
+        shadowOpacity={isSoft ? 0 : 0.05}
+        shadowRadius={16}
+        shadowOffset={{ width: 0, height: 4 }}
+      >
+        {icon}
+        <Text fontSize={14} fontWeight="800" color={palette.ink}>
+          {label}
+        </Text>
+      </XStack>
+    </Pressable>
+  );
+}
+
+function TermsNotice({ onPressTerms }: { onPressTerms: () => void }) {
+  return (
+    <Text fontSize={12} lineHeight={18} color={palette.gray} textAlign="center">
+      By continuing, you agree to ReTalk&apos;s{' '}
+      <Text
+        fontSize={12}
+        lineHeight={18}
+        fontWeight="700"
+        color={palette.primary}
+        onPress={onPressTerms}
+      >
+        Terms and Conditions
+      </Text>
+      .
+    </Text>
+  );
+}
+
+function AuthFooterLink({
+  copy,
+  isRegister,
+  onModeChange,
+}: {
+  copy: (typeof authCopy)[AuthMode];
+  isRegister: boolean;
+  onModeChange: (mode: AuthMode) => void;
+}) {
+  return (
+    <XStack justifyContent="center" gap={4}>
+      <Text fontSize={14} color={palette.gray}>
+        {copy.footerText}
+      </Text>
+      <Pressable onPress={() => onModeChange(isRegister ? 'login' : 'register')}>
+        <Text fontSize={14} fontWeight="800" color={palette.ink}>
+          {copy.footerLink}
+        </Text>
+      </Pressable>
+    </XStack>
+  );
+}
+
+export function AuthScreen({ initialMode = 'register' }: { initialMode?: AuthMode }) {
   const router = useRouter();
+  const params = useLocalSearchParams<{ mode?: string }>();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const requestedMode = getRequestedAuthMode(params.mode, initialMode);
   const signIn = useSessionStore((state) => state.signIn);
   const testSignIn = useSessionStore((state) => state.testSignIn);
   const register = useSessionStore((state) => state.register);
   const completeGoogleAuth = useSessionStore((state) => state.completeGoogleAuth);
+  const [mode, setMode] = useState<AuthMode>(requestedMode);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const lastRequestedMode = useRef<AuthMode>(requestedMode);
 
   const copy = authCopy[mode];
   const isWide = width >= 840;
   const isRegister = mode === 'register';
+  const isLogin = mode === 'login';
+  const showPreview = isWide && !isLogin;
 
-  const footerHref = copy.footerHref;
+  const submitOpacity = useSharedValue(1);
+  const formOpacity = useSharedValue(1);
+  const formOffset = useSharedValue(0);
+
+  useEffect(() => {
+    submitOpacity.value = withTiming(isSubmitting ? 0.7 : 1, { duration: 200 });
+  }, [isSubmitting, submitOpacity]);
+
+  useEffect(() => {
+    if (requestedMode !== lastRequestedMode.current && !isSubmitting) {
+      lastRequestedMode.current = requestedMode;
+      setMode(requestedMode);
+    }
+  }, [isSubmitting, requestedMode]);
+
+  const submitAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: submitOpacity.value,
+  }));
+
+  const formAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: formOpacity.value,
+    transform: [{ translateX: formOffset.value }, { scale: 0.985 + formOpacity.value * 0.015 }],
+  }));
 
   function describeError(err: unknown, fallback: string) {
     return err instanceof AuthApiError ? err.message : fallback;
   }
+
+  const handleModeChange = (nextMode: AuthMode) => {
+    if (nextMode === mode || isSubmitting) {
+      return;
+    }
+
+    setError(null);
+    formOpacity.value = 0;
+    formOffset.value = nextMode === 'register' ? 24 : -24;
+    setMode(nextMode);
+
+    requestAnimationFrame(() => {
+      formOpacity.value = withTiming(1, { duration: 220 });
+      formOffset.value = withTiming(0, { duration: 260 });
+    });
+  };
 
   const handleSubmit = async () => {
     if (isSubmitting) {
       return;
     }
 
-    if (isRegister && !name.trim()) {
-      setError('Enter your name to continue.');
-      return;
-    }
+    const validationError = getAuthValidationError(mode, {
+      name,
+      email,
+      password,
+      confirmPassword,
+    });
 
-    if (!email.trim() || !password) {
-      setError('Enter your email and password to continue.');
-      return;
-    }
-
-    if (isRegister && password.length < 8) {
-      setError('Use a password with at least 8 characters.');
-      return;
-    }
-
-    if (isRegister && password !== confirmPassword) {
-      setError('The passwords you entered do not match.');
+    if (validationError) {
+      setError(validationError);
       return;
     }
 
@@ -387,16 +639,23 @@ export function AuthScreen({ mode }: { mode: AuthMode }) {
       >
         <XStack
           width="100%"
-          maxWidth={1120}
+          maxWidth={showPreview ? 1120 : 420}
           alignSelf="center"
-          alignItems={isWide ? 'center' : 'stretch'}
+          alignItems="center"
           justifyContent="center"
-          gap={isWide ? 42 : 22}
-          flexDirection={isWide ? 'row' : 'column'}
+          gap={showPreview ? 42 : 26}
+          flexDirection={showPreview ? 'row' : 'column'}
         >
-          <YStack flex={isWide ? 1 : undefined} minHeight={isWide ? 680 : undefined} justifyContent="space-between" gap={26}>
+          <YStack
+            width="100%"
+            flex={showPreview ? 1 : undefined}
+            minHeight={showPreview ? 680 : undefined}
+            justifyContent={showPreview ? 'space-between' : 'center'}
+            alignItems="center"
+            gap={26}
+          >
             <Pressable onPress={() => router.replace('/')}>
-              <XStack alignItems="center" gap={10} alignSelf="flex-start">
+              <XStack alignItems="center" gap={10} alignSelf={showPreview ? 'flex-start' : 'center'}>
                 <View
                   width={56}
                   height={56}
@@ -417,192 +676,124 @@ export function AuthScreen({ mode }: { mode: AuthMode }) {
               </XStack>
             </Pressable>
 
-            <YStack width="100%" maxWidth={360} alignSelf={isWide ? 'center' : 'stretch'} gap={24}>
-              <XStack backgroundColor={palette.fog} borderRadius={999} padding={4}>
-                {(['login', 'register'] as const).map((item) => {
-                  const isActive = item === mode;
-                  return (
-                    <Pressable
-                      key={item}
-                      onPress={() => router.replace(item === 'login' ? '/login' : '/register')}
-                      style={styles.segmentButton}
-                    >
-                      <View
-                        height={38}
-                        alignItems="center"
-                        justifyContent="center"
-                        borderRadius={999}
-                        backgroundColor={isActive ? 'white' : 'transparent'}
-                        shadowColor="#0f172a"
-                        shadowOpacity={isActive ? 0.05 : 0}
-                        shadowRadius={12}
-                        shadowOffset={{ width: 0, height: 4 }}
-                      >
-                        <Text fontSize={13} fontWeight="800" color={isActive ? palette.ink : palette.gray}>
-                          {item === 'login' ? 'Login' : 'Register'}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </XStack>
+            <YStack width="100%" maxWidth={360} alignSelf="center" gap={24}>
+              <AuthModeTabs mode={mode} onChange={handleModeChange} />
 
-              <YStack gap={20}>
-                <YStack alignItems="center" gap={6}>
-                  <Text fontSize={24} lineHeight={30} fontWeight="800" color={palette.ink} textAlign="center">
-                    {copy.title}
-                  </Text>
-                  <Text fontSize={14} lineHeight={20} color={palette.gray} textAlign="center">
-                    {copy.description}
-                  </Text>
-                </YStack>
-
-                {error ? (
-                  <View borderRadius={8} borderWidth={1} borderColor="rgba(255,107,107,0.35)" backgroundColor={palette.dangerSoft} padding={12}>
-                    <Text fontSize={13} fontWeight="700" color={palette.dangerText}>
-                      {error}
+              <Animated.View style={[styles.formTransition, formAnimatedStyle]}>
+                <YStack gap={20}>
+                  <YStack alignItems="center" gap={6}>
+                    <Text fontSize={24} lineHeight={30} fontWeight="800" color={palette.ink} textAlign="center">
+                      {copy.title}
                     </Text>
-                  </View>
-                ) : null}
-
-                {isRegister ? (
-                  <AuthInput
-                    label="Name"
-                    value={name}
-                    onChangeText={setName}
-                    autoComplete="name"
-                  />
-                ) : null}
-                <AuthInput
-                  label="Email"
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="m@example.com"
-                  autoComplete="email"
-                  keyboardType="email-address"
-                />
-                <YStack gap={8}>
-                  <XStack alignItems="center">
-                    <Text flex={1} fontSize={14} fontWeight="700" color={palette.ink}>
-                      Password
+                    <Text fontSize={14} lineHeight={20} color={palette.gray} textAlign="center">
+                      {copy.description}
                     </Text>
-                    {!isRegister ? (
-                      <Pressable onPress={() => setError('Password reset is not wired in this prototype yet.')}>
-                        <Text fontSize={13} fontWeight="700" color={palette.tealText}>
-                          Forgot your password?
-                        </Text>
-                      </Pressable>
-                    ) : null}
-                  </XStack>
-                  <TextInput
-                    value={password}
-                    onChangeText={setPassword}
-                    secureTextEntry
-                    autoComplete={isRegister ? 'new-password' : 'current-password'}
-                    style={styles.input}
-                  />
-                </YStack>
-                {isRegister ? (
+                  </YStack>
+
+                  <AuthErrorMessage message={error} />
+
+                  {isRegister ? (
+                    <AuthInput
+                      label="Name"
+                      value={name}
+                      onChangeText={setName}
+                      autoComplete="name"
+                    />
+                  ) : null}
                   <AuthInput
-                    label="Confirm password"
-                    value={confirmPassword}
-                    onChangeText={setConfirmPassword}
-                    secureTextEntry
-                    autoComplete="new-password"
+                    label="Email"
+                    value={email}
+                    onChangeText={setEmail}
+                    placeholder="m@example.com"
+                    autoComplete="email"
+                    keyboardType="email-address"
                   />
-                ) : null}
-
-                <YStack gap={10}>
-                  <Pressable onPress={handleSubmit} disabled={isSubmitting}>
-                    <LinearGradient
-                      colors={palette.primaryGradient}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={[styles.submitButton, { opacity: isSubmitting ? 0.7 : 1 }]}
-                    >
-                      <Text color="white" fontSize={14} fontWeight="800">
-                        {isSubmitting ? 'Please wait…' : copy.submit}
+                  <YStack gap={8}>
+                    <XStack alignItems="center">
+                      <Text flex={1} fontSize={14} fontWeight="700" color={palette.ink}>
+                        Password
                       </Text>
-                    </LinearGradient>
-                  </Pressable>
-                  <Text fontSize={12} lineHeight={18} color={palette.gray} textAlign="center">
-                    By continuing, you agree to ReTalk&apos;s Terms and Conditions.
-                  </Text>
-                </YStack>
-
-                <XStack alignItems="center" gap={10}>
-                  <View flex={1} height={1} backgroundColor="#dce5e2" />
-                  <Text fontSize={13} color={palette.gray}>
-                    Or continue with
-                  </Text>
-                  <View flex={1} height={1} backgroundColor="#dce5e2" />
-                </XStack>
-
-                <YStack gap={14}>
-                  <Pressable onPress={handleGoogleSignIn} disabled={isSubmitting}>
-                    <XStack
-                      height={44}
-                      alignItems="center"
-                      justifyContent="center"
-                      gap={10}
-                      borderRadius={999}
-                      borderWidth={1}
-                      borderColor="#e6e8ec"
-                      backgroundColor="white"
-                      opacity={isSubmitting ? 0.7 : 1}
-                      shadowColor="#0f172a"
-                      shadowOpacity={0.05}
-                      shadowRadius={16}
-                      shadowOffset={{ width: 0, height: 4 }}
-                    >
-                      <GoogleIcon />
-                      <Text fontSize={14} fontWeight="800" color={palette.ink}>
-                        Continue with Google
-                      </Text>
+                      {!isRegister ? (
+                        <Pressable onPress={() => router.push('/forgot-password')}>
+                          <Text fontSize={13} fontWeight="700" color={palette.primary}>
+                            Forgot your password?
+                          </Text>
+                        </Pressable>
+                      ) : null}
                     </XStack>
-                  </Pressable>
-
-                  {!isRegister ? (
-                    <Pressable onPress={handleTestSignIn} disabled={isSubmitting}>
-                      <XStack
-                        height={44}
-                        alignItems="center"
-                        justifyContent="center"
-                        gap={10}
-                        borderRadius={999}
-                        borderWidth={1}
-                        borderColor="rgba(41,47,54,0.12)"
-                        backgroundColor={palette.fog}
-                        opacity={isSubmitting ? 0.7 : 1}
-                      >
-                        <IconlyIcon name="UserPlus" size={18} color={palette.ink} />
-                        <Text fontSize={14} fontWeight="800" color={palette.ink}>
-                          Continue as test user
-                        </Text>
-                      </XStack>
-                    </Pressable>
+                    <TextInput
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry
+                      autoComplete={isRegister ? 'new-password' : 'current-password'}
+                      style={styles.input}
+                    />
+                  </YStack>
+                  {isRegister ? (
+                    <AuthInput
+                      label="Confirm password"
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                      secureTextEntry
+                      autoComplete="new-password"
+                    />
                   ) : null}
 
-                  <XStack justifyContent="center" gap={4}>
-                    <Text fontSize={14} color={palette.gray}>
-                      {copy.footerText}
-                    </Text>
-                    <Pressable onPress={() => router.replace(footerHref)}>
-                      <Text fontSize={14} fontWeight="800" color={palette.ink}>
-                        {copy.footerLink}
-                      </Text>
-                    </Pressable>
-                  </XStack>
+                  <YStack gap={10}>
+                    <AuthSubmitButton
+                      label={copy.submit}
+                      isSubmitting={isSubmitting}
+                      animatedStyle={submitAnimatedStyle}
+                      onPress={handleSubmit}
+                      onPressIn={() => {
+                        submitOpacity.value = withTiming(0.6, { duration: 120 });
+                      }}
+                      onPressOut={() => {
+                        submitOpacity.value = withTiming(isSubmitting ? 0.7 : 1, { duration: 150 });
+                      }}
+                    />
+                    <TermsNotice onPressTerms={() => router.push('/terms')} />
+                  </YStack>
+
+                  <AuthDivider />
+
+                  <YStack gap={14}>
+                    <SocialAuthButton
+                      icon={<GoogleIcon />}
+                      label="Continue with Google"
+                      disabled={isSubmitting}
+                      onPress={handleGoogleSignIn}
+                    />
+
+                    {!isRegister ? (
+                      <SocialAuthButton
+                        icon={<IconlyIcon name="UserPlus" size={18} color={palette.ink} />}
+                        label="Continue as test user"
+                        disabled={isSubmitting}
+                        variant="soft"
+                        onPress={handleTestSignIn}
+                      />
+                    ) : null}
+
+                    <AuthFooterLink copy={copy} isRegister={isRegister} onModeChange={handleModeChange} />
+                  </YStack>
                 </YStack>
-              </YStack>
+              </Animated.View>
             </YStack>
 
-            <Text fontSize={12} lineHeight={18} color={palette.gray} maxWidth={320} display={isWide ? 'flex' : 'none'}>
+            <Text
+              fontSize={12}
+              lineHeight={18}
+              color={palette.gray}
+              maxWidth={320}
+              textAlign="center"
+              display={isWide ? 'flex' : 'none'}
+            >
               Find curated events, communities, and plans nearby.
             </Text>
           </YStack>
 
-          <View flex={isWide ? 1 : undefined} alignItems="center" display={isWide ? 'flex' : 'none'}>
+          <View flex={showPreview ? 1 : undefined} alignItems="center" display={showPreview ? 'flex' : 'none'}>
             <AuthPreviewCard />
           </View>
         </XStack>
@@ -637,6 +828,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  formTransition: {
+    width: '100%',
   },
   segmentButton: {
     flex: 1,

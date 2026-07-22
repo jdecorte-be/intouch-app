@@ -159,7 +159,7 @@ export default function ProfileScreen() {
         <Text fontSize={14} lineHeight={22} color={palette.gray} textAlign="center">
           Sign in to join event chats, save your interests, and host your own activities.
         </Text>
-        <Pressable onPress={() => router.push('/login')}>
+        <Pressable onPress={() => router.push('/auth?mode=login')}>
           <View borderRadius={999} backgroundColor={palette.ink} paddingHorizontal={20} paddingVertical={12} marginTop={8}>
             <Text color="white" fontWeight="700" fontSize={14}>
               Sign in

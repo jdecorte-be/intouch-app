@@ -10,18 +10,19 @@ import type {
 } from './types';
 
 // Single seam between the UI and the data source: every read/write goes
-// through the retalk.live Next.js backend.
+// through the retalk-api NestJS backend. Routes live at the API root
+// (no /api/mobile prefix) — see ../retalk-api/src/*/*.controller.ts.
 
 const NETWORK_DELAY_MS = 250;
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://retalk.live';
-export const GOOGLE_SIGN_IN_URL = `${API_BASE_URL}/api/mobile/auth/google`;
+export const GOOGLE_SIGN_IN_URL = `${API_BASE_URL}/auth/google?client=mobile`;
 
 function delay<T>(value: T): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), NETWORK_DELAY_MS));
 }
 
 export async function fetchEvents(): Promise<EventItem[]> {
-  const response = await fetch(`${API_BASE_URL}/api/events`);
+  const response = await fetch(`${API_BASE_URL}/events`);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch events: ${response.status}`);
@@ -83,7 +84,7 @@ async function parseAuthResponse(response: Response): Promise<{ token: string; u
 }
 
 export async function signInWithCredentials(email: string, password: string) {
-  const response = await fetch(`${API_BASE_URL}/api/mobile/auth/login`, {
+  const response = await fetch(`${API_BASE_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
@@ -93,13 +94,26 @@ export async function signInWithCredentials(email: string, password: string) {
 }
 
 export async function registerWithCredentials(name: string, email: string, password: string) {
-  const response = await fetch(`${API_BASE_URL}/api/mobile/auth/register`, {
+  const response = await fetch(`${API_BASE_URL}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, email, password }),
   });
 
   return parseAuthResponse(response);
+}
+
+export async function requestPasswordReset(email: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/auth/password-reset/request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new AuthApiError(body?.error ?? 'Unknown');
+  }
 }
 
 export async function completeGoogleSignIn(token: string) {
@@ -121,7 +135,7 @@ export async function fetchSession(token: string | null): Promise<SessionUser | 
     return null;
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/mobile/auth/session`, {
+  const response = await fetch(`${API_BASE_URL}/auth/session`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
@@ -148,7 +162,7 @@ export type MobileMe = {
 // Bundles the signed-in user's own hosted events/groups and the ones
 // they've marked interest in, for the profile screen.
 export async function fetchMe(token: string): Promise<MobileMe> {
-  const response = await fetch(`${API_BASE_URL}/api/mobile/me`, {
+  const response = await fetch(`${API_BASE_URL}/me`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 
@@ -167,7 +181,7 @@ export async function fetchMe(token: string): Promise<MobileMe> {
 }
 
 export async function signOutRemote(token: string): Promise<void> {
-  await fetch(`${API_BASE_URL}/api/mobile/auth/logout`, {
+  await fetch(`${API_BASE_URL}/auth/logout`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
   }).catch(() => {});
@@ -204,8 +218,11 @@ function toNotification(raw: any): NotificationItem {
   };
 }
 
+// retalk-api has no notifications module yet — this 404s until one ships.
+// loadNotifications() in the notifications store already treats any
+// failure as "no notifications" rather than surfacing an error.
 export async function fetchNotifications(token: string): Promise<NotificationItem[]> {
-  const response = await fetch(`${API_BASE_URL}/api/mobile/notifications`, {
+  const response = await fetch(`${API_BASE_URL}/notifications`, {
     headers: authHeaders(token),
   });
 
@@ -253,6 +270,21 @@ function toChatMessage(raw: any): ChatMessage {
   };
 }
 
+// retalk-api's ChatThreadView doesn't include eventId, but it mints event
+// thread ids as `event-chat-${eventId}` (see ChatsService.joinEventChatForUser),
+// so it can be recovered from the id for kind: 'event' threads.
+function eventIdFromThreadId(raw: any): string | undefined {
+  if (raw.eventId) {
+    return raw.eventId;
+  }
+
+  if (raw.kind === 'event' && typeof raw.id === 'string' && raw.id.startsWith('event-chat-')) {
+    return raw.id.slice('event-chat-'.length);
+  }
+
+  return undefined;
+}
+
 function toChatThread(raw: any): ChatThread {
   const title: string = raw.title;
 
@@ -267,13 +299,13 @@ function toChatThread(raw: any): ChatThread {
     unreadCount: raw.unreadCount ?? 0,
     pinned: raw.pinned,
     tags: raw.tags,
-    eventId: raw.eventId ?? undefined,
+    eventId: eventIdFromThreadId(raw),
     messages: Array.isArray(raw.messages) ? raw.messages.map(toChatMessage) : [],
   };
 }
 
 export async function fetchChatThreads(token: string): Promise<ChatThread[]> {
-  const response = await fetch(`${API_BASE_URL}/api/mobile/chats`, {
+  const response = await fetch(`${API_BASE_URL}/chats`, {
     headers: authHeaders(token),
   });
 
@@ -288,7 +320,7 @@ export async function fetchChatThreads(token: string): Promise<ChatThread[]> {
 }
 
 export async function fetchChatThread(threadId: string, token: string): Promise<ChatThread> {
-  const response = await fetch(`${API_BASE_URL}/api/mobile/chats/${threadId}`, {
+  const response = await fetch(`${API_BASE_URL}/chats/${threadId}`, {
     headers: authHeaders(token),
   });
 
@@ -304,7 +336,7 @@ export async function fetchChatThread(threadId: string, token: string): Promise<
 }
 
 export async function joinEventChat(event: EventItem, token: string): Promise<ChatThread> {
-  const response = await fetch(`${API_BASE_URL}/api/mobile/chats/join`, {
+  const response = await fetch(`${API_BASE_URL}/chats/join`, {
     method: 'POST',
     headers: authHeaders(token),
     body: JSON.stringify({ eventId: event.id }),
@@ -333,7 +365,13 @@ export async function startDirectChat(
   token: string,
   eventId?: string,
 ): Promise<ChatThread> {
-  const response = await fetch(`${API_BASE_URL}/api/mobile/chats/direct`, {
+  // retalk-api's StartDirectChatDto requires eventId (direct chats are
+  // always scoped to the event that introduced the two members).
+  if (!eventId) {
+    throw new Error('Starting a direct message requires an event to message about.');
+  }
+
+  const response = await fetch(`${API_BASE_URL}/chats/direct`, {
     method: 'POST',
     headers: authHeaders(token),
     body: JSON.stringify({ member: memberName, memberUserId, eventId }),
@@ -359,7 +397,7 @@ export async function sendChatMessage(
   text: string,
   token: string,
 ): Promise<ChatMessage> {
-  const response = await fetch(`${API_BASE_URL}/api/mobile/chats/${chatId}/messages`, {
+  const response = await fetch(`${API_BASE_URL}/chats/${chatId}/messages`, {
     method: 'POST',
     headers: authHeaders(token),
     body: JSON.stringify({ text }),
@@ -370,12 +408,17 @@ export async function sendChatMessage(
   }
 
   const body = await response.json();
+  // retalk-api's send-message endpoint returns the whole updated thread
+  // rather than the single new message, so pull the last message off it —
+  // messages come back ordered oldest-first, and this request just added one.
+  const thread = body.chat ?? body.thread ?? body;
+  const messages = Array.isArray(thread.messages) ? thread.messages : [];
 
-  return toChatMessage(body.message ?? body);
+  return toChatMessage(messages[messages.length - 1]);
 }
 
 export async function markChatThreadRead(threadId: string, token: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/api/mobile/chats/${threadId}/read`, {
+  const response = await fetch(`${API_BASE_URL}/chats/${threadId}/read`, {
     method: 'POST',
     headers: authHeaders(token),
   });
