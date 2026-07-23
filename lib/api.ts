@@ -1,3 +1,4 @@
+import type { OnboardingProfileChanges } from './onboarding';
 import { palette } from './palette';
 import type {
   ChatMessage,
@@ -35,11 +36,17 @@ type SerializedSessionUser = {
   id: string;
   name: string | null;
   email: string;
+  age?: number | null;
+  gender?: string | null;
+  languagesSpoken?: string[] | null;
   image: string | null;
+  photos?: string[] | null;
   homeNeighborhood: string | null;
+  homeCoordinates?: [number, number] | null;
   eventInterests: string[];
   eventGoals: string[];
   memberSince: string;
+  onboardingCompletedAt?: string | null;
 };
 
 function toSessionUser(user: SerializedSessionUser): SessionUser {
@@ -47,11 +54,17 @@ function toSessionUser(user: SerializedSessionUser): SessionUser {
     id: user.id,
     name: user.name?.trim() || user.email.split('@')[0] || 'ReTalk Member',
     email: user.email,
+    age: user.age ?? null,
+    gender: (user.gender as SessionUser['gender']) ?? null,
+    languagesSpoken: user.languagesSpoken ?? [],
     image: user.image,
+    photos: user.photos ?? [],
     homeNeighborhood: user.homeNeighborhood,
+    homeCoordinates: user.homeCoordinates ?? null,
     eventInterests: user.eventInterests as HostableCategory[],
     eventGoals: user.eventGoals,
     memberSince: user.memberSince,
+    onboardingCompletedAt: user.onboardingCompletedAt ?? null,
   };
 }
 
@@ -152,6 +165,40 @@ export async function fetchSession(token: string | null): Promise<SessionUser | 
   return body.user ? toSessionUser(body.user) : null;
 }
 
+// Persists onboarding answers to the user's account (retalk-api's
+// PATCH /auth/onboarding) so completion is tracked server-side via
+// onboardingCompletedAt, rather than only in local device storage — the
+// same endpoint mobile's "edit profile" flow reuses to update these fields.
+export async function completeOnboarding(
+  token: string,
+  changes: OnboardingProfileChanges,
+): Promise<SessionUser> {
+  const response = await fetch(`${API_BASE_URL}/auth/onboarding`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      name: changes.name,
+      age: changes.age ?? undefined,
+      gender: changes.gender ?? undefined,
+      languagesSpoken: changes.languagesSpoken,
+      image: changes.image ?? undefined,
+      photos: changes.photos,
+      homeNeighborhood: changes.homeNeighborhood ?? undefined,
+      homeLongitude: changes.homeCoordinates?.[0],
+      homeLatitude: changes.homeCoordinates?.[1],
+      eventInterests: changes.eventInterests,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to save onboarding: ${response.status}`);
+  }
+
+  const body = await response.json();
+
+  return toSessionUser(body.user);
+}
+
 export type MobileMe = {
   hostedEvents: EventItem[];
   hostedGroups: EventItem[];
@@ -205,6 +252,7 @@ function toNotification(raw: any): NotificationItem {
   return {
     id: raw.id,
     actor: raw.actor,
+    actorImage: raw.actorImage ?? null,
     time: raw.time,
     title: raw.title,
     detail: raw.detail ?? undefined,
@@ -218,9 +266,6 @@ function toNotification(raw: any): NotificationItem {
   };
 }
 
-// retalk-api has no notifications module yet — this 404s until one ships.
-// loadNotifications() in the notifications store already treats any
-// failure as "no notifications" rather than surfacing an error.
 export async function fetchNotifications(token: string): Promise<NotificationItem[]> {
   const response = await fetch(`${API_BASE_URL}/notifications`, {
     headers: authHeaders(token),
@@ -234,6 +279,20 @@ export async function fetchNotifications(token: string): Promise<NotificationIte
   const notifications = body.notifications ?? body;
 
   return (notifications as any[]).map(toNotification);
+}
+
+export async function markNotificationRead(token: string, id: string): Promise<void> {
+  await fetch(`${API_BASE_URL}/notifications/${id}/read`, {
+    method: 'PATCH',
+    headers: authHeaders(token),
+  });
+}
+
+export async function markAllNotificationsRead(token: string): Promise<void> {
+  await fetch(`${API_BASE_URL}/notifications/read-all`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
 }
 
 export async function toggleEventInterest(
@@ -263,10 +322,14 @@ function toChatMessage(raw: any): ChatMessage {
   return {
     id: raw.id,
     author: raw.author,
+    authorId: raw.authorId ?? null,
     authorImage: raw.authorImage ?? null,
     fromSelf: Boolean(raw.fromSelf),
     text: raw.text,
+    image: raw.image ?? null,
     sentAt: raw.sentAt,
+    kind: raw.kind === 'system' ? 'system' : 'text',
+    reactions: Array.isArray(raw.reactions) ? raw.reactions : [],
   };
 }
 
@@ -295,11 +358,20 @@ function toChatThread(raw: any): ChatThread {
     subtitle: raw.subtitle ?? '',
     accent: raw.accent ?? '#5b6b82',
     initials: raw.initials ?? initialsFrom(title),
+    icon: raw.icon ?? undefined,
     avatarImage: raw.avatarImage ?? null,
     unreadCount: raw.unreadCount ?? 0,
     pinned: raw.pinned,
     tags: raw.tags,
     eventId: eventIdFromThreadId(raw),
+    participants: Array.isArray(raw.participants)
+      ? raw.participants.map((participant: any) => ({
+          id: participant.id,
+          name: participant.name,
+          image: participant.image ?? null,
+        }))
+      : [],
+    participantCount: raw.participantCount ?? raw.participants?.length ?? 0,
     messages: Array.isArray(raw.messages) ? raw.messages.map(toChatMessage) : [],
   };
 }
@@ -354,6 +426,7 @@ export async function joinEventChat(event: EventItem, token: string): Promise<Ch
     title: event.title,
     subtitle: `${event.going} members · ${event.neighborhood}`,
     accent: event.accent,
+    icon: event.icon,
     eventId: event.id,
     ...thread,
   });
@@ -396,11 +469,12 @@ export async function sendChatMessage(
   chatId: string,
   text: string,
   token: string,
+  image?: string | null,
 ): Promise<ChatMessage> {
   const response = await fetch(`${API_BASE_URL}/chats/${chatId}/messages`, {
     method: 'POST',
     headers: authHeaders(token),
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, image: image ?? undefined }),
   });
 
   if (!response.ok) {
@@ -425,5 +499,44 @@ export async function markChatThreadRead(threadId: string, token: string): Promi
 
   if (!response.ok) {
     throw new Error(`Failed to mark chat read: ${response.status}`);
+  }
+}
+
+export async function toggleChatMessageReaction(
+  threadId: string,
+  messageId: string,
+  emoji: string,
+  token: string,
+): Promise<ChatMessage> {
+  const response = await fetch(`${API_BASE_URL}/chats/${threadId}/messages/${messageId}/reactions`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ emoji }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to update reaction: ${response.status}`);
+  }
+
+  const body = await response.json();
+  const thread = body.chat ?? body.thread ?? body;
+  const messages = Array.isArray(thread.messages) ? thread.messages : [];
+  const message = messages.find((candidate: any) => candidate.id === messageId);
+
+  if (!message) {
+    throw new Error('Failed to update reaction: message missing from response');
+  }
+
+  return toChatMessage(message);
+}
+
+export async function leaveChatThread(threadId: string, token: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/chats/${threadId}/leave`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to leave chat: ${response.status}`);
   }
 }

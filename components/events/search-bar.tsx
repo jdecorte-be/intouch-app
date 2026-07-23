@@ -1,3 +1,4 @@
+import { forwardRef } from 'react';
 import { Pressable, TextInput } from 'react-native';
 import { View, XStack } from 'tamagui';
 
@@ -5,19 +6,16 @@ import { IconlyIcon } from '@/components/icons/iconly-icon';
 import { palette } from '@/lib/palette';
 import { appTextInputStyle } from '@/lib/typography';
 
-export function SearchBar({
-  query,
-  placeholder = 'Search people or events',
-  autoFocus = false,
-  onFocus,
-  onQueryChange,
-}: {
+export const SearchBar = forwardRef<TextInput, {
   query: string;
   placeholder?: string;
   autoFocus?: boolean;
   onFocus?: () => void;
   onQueryChange: (value: string) => void;
-}) {
+}>(function SearchBar(
+  { query, placeholder = 'Search people or events', autoFocus = false, onFocus, onQueryChange },
+  ref,
+) {
   return (
     <XStack
       height={44}
@@ -31,6 +29,7 @@ export function SearchBar({
     >
       <IconlyIcon name="Search" size={16} color={palette.gray} />
       <TextInput
+        ref={ref}
         autoFocus={autoFocus}
         value={query}
         onFocus={onFocus}
@@ -58,4 +57,4 @@ export function SearchBar({
       ) : null}
     </XStack>
   );
-}
+});

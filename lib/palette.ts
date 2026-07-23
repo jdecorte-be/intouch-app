@@ -9,6 +9,8 @@ export const palette = {
   muted: '#9a9ea6',
   fog: '#f3f3f4',
   line: '#eceef2',
+  border: 'rgba(41,47,54,0.1)',
+  borderStrong: 'rgba(41,47,54,0.12)',
   mist: '#ffffff',
   mapWater: '#ffffff',
   white: '#ffffff',

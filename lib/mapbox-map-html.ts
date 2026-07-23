@@ -38,6 +38,10 @@ export function toMapEvent(event: MapEvent) {
     // Lighter, more vibrant take on the category accent — used for the
     // group pin border so groups pop against the map instead of reading flat.
     accentLight: categoryAccentsLight[event.category],
+    // Kept on the payload (unlike most fields here) so the map can filter
+    // pins by the active category chip client-side — see activeCategory /
+    // window.setActiveCategory below.
+    category: event.category,
     going: event.going,
     coordinates: event.coordinates,
     // Groups stay icon-only; events get a real photo on the pin.
@@ -104,8 +108,16 @@ export function createMapboxMapHtml(events: MapEvent[]) {
         padding: 0;
         transition:
           transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1),
-          box-shadow 220ms ease;
+          box-shadow 220ms ease,
+          opacity 200ms ease;
         will-change: transform;
+      }
+
+      /* Groups outside the active category chip stay on the map but fade
+         back — unlike events, which are excluded outright when they don't
+         match (see eventsToRender). */
+      .event-marker-dimmed {
+        opacity: 0;
       }
 
       .event-pin {
@@ -127,14 +139,14 @@ export function createMapboxMapHtml(events: MapEvent[]) {
         backdrop-filter: blur(10px);
         border-radius: 999px;
         border-style: solid;
-        border-width: 2.5px;
-        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.24);
+        border-width: 3px;
+        box-shadow: 0 10px 22px rgba(15, 23, 42, 0.24);
         display: flex;
-        font-size: 22px;
-        height: 50px;
+        font-size: 26px;
+        height: 60px;
         justify-content: center;
         line-height: 1;
-        width: 50px;
+        width: 60px;
       }
 
       .event-pin-badge {
@@ -143,13 +155,13 @@ export function createMapboxMapHtml(events: MapEvent[]) {
         border-radius: 999px;
         box-shadow: 0 2px 6px rgba(15, 23, 42, 0.25);
         color: #ffffff;
-        font: 700 9px/17px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        min-width: 17px;
-        padding: 0 4px;
+        font: 700 10px/20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        min-width: 20px;
+        padding: 0 5px;
         position: absolute;
-        right: -6px;
+        right: -7px;
         text-align: center;
-        top: -6px;
+        top: -7px;
       }
 
       /* NOT position: relative here — this class also lands on the marker
@@ -234,6 +246,10 @@ export function createMapboxMapHtml(events: MapEvent[]) {
       // — into the already-running map instead of rebuilding this whole
       // document, which would force a full WebView/iframe reload.
       let mapEvents = ${JSON.stringify(events.map(toMapEvent))};
+      // Which category chip is active on the host screen. renderMarkers
+      // filters pins down to this category (see eventsToRender) so
+      // switching categories fully swaps which pins are on the map.
+      let activeCategory = 'featured';
 
       function showMapError(message) {
         const errorElement = document.getElementById('map-error');
@@ -466,8 +482,15 @@ export function createMapboxMapHtml(events: MapEvent[]) {
         // A pin freshly split out of a cluster gets the fly-apart animation
         // instead of the plain pop, so the two don't fight each other.
         const usePop = isNew && !splitOffset;
+        // Only groups can reach here outside the active category (events
+        // outside it are filtered out of eventsToRender entirely), so dim
+        // just the ones that don't match instead of hiding them.
+        const isDimmed = isGroup && activeCategory !== 'featured' && event.category !== activeCategory;
         markerElement.className =
-          'event-map-marker ' + (isGroup ? 'event-pin-group' : 'event-pin') + (usePop ? ' event-marker-pop' : '');
+          'event-map-marker ' +
+          (isGroup ? 'event-pin-group' : 'event-pin') +
+          (usePop ? ' event-marker-pop' : '') +
+          (isDimmed ? ' event-marker-dimmed' : '');
 
         if (splitOffset) {
           animateMarkerSplit(markerElement, splitOffset);
@@ -519,10 +542,20 @@ export function createMapboxMapHtml(events: MapEvent[]) {
           'event-cluster-shadow event-cluster-shadow-mid ' + (isGroup ? 'event-pin-group' : 'event-pin');
         innerWrap.append(shadowMid);
 
+        // Event clusters are always pure-category by the time they get here
+        // (non-matching events are filtered out of eventsToRender), but a
+        // group cluster can still mix categories — dim it only if none of
+        // its members match the active one.
+        const isDimmed =
+          isGroup &&
+          activeCategory !== 'featured' &&
+          cluster.every((clusterEvent) => clusterEvent.category !== activeCategory);
+
         const markerElement = document.createElement('button');
         markerElement.type = 'button';
         markerElement.setAttribute('aria-label', cluster.length + ' ' + clusterLabel + ' nearby, tap to zoom in');
-        markerElement.className = 'event-map-marker ' + (isGroup ? 'event-pin-group' : 'event-pin');
+        markerElement.className =
+          'event-map-marker ' + (isGroup ? 'event-pin-group' : 'event-pin') + (isDimmed ? ' event-marker-dimmed' : '');
 
         if (isGroup) {
           markerElement.style.borderColor = hexToRgba(primary.accentLight, ${MARKER_BORDER_OPACITY});
@@ -615,10 +648,22 @@ export function createMapboxMapHtml(events: MapEvent[]) {
             );
           });
 
+          // Reported for the chip badge counts, so switching categories
+          // still shows accurate counts for every category — independent of
+          // which category is actually rendered as pins below.
           postVisibleEventsUpdate(eventsInView);
 
+          // Only cluster/render pins matching the active category chip; the
+          // rest are excluded entirely rather than dimmed, so switching
+          // categories fully swaps which pins are on the map. Groups stay on
+          // the map regardless of category — the chip only filters events.
+          const eventsToRender =
+            activeCategory === 'featured'
+              ? eventsInView
+              : eventsInView.filter((event) => event.kind === 'group' || event.category === activeCategory);
+
           const clusters = clusterPoints(
-            eventsInView,
+            eventsToRender,
             (event) => pixelPositions.get(event.id),
             (a, b) => Math.hypot(a.x - b.x, a.y - b.y) <= CLUSTER_PIXEL_RADIUS,
             (event, cluster) => event.kind === cluster[0].kind
@@ -771,6 +816,18 @@ export function createMapboxMapHtml(events: MapEvent[]) {
           }
         };
 
+        // Lets the host screen tell the already-running map which category
+        // chip is active — renderMarkers filters eventsToRender down to it
+        // — without the host having to resend a smaller event list (which
+        // would also blow away the chip counts for other categories).
+        window.setActiveCategory = (category) => {
+          activeCategory = typeof category === 'string' && category ? category : 'featured';
+
+          if (isMapLoaded) {
+            renderMarkers();
+          }
+        };
+
         // Native delivers updates via injectJavaScript calling
         // window.updateMapEvents directly; the web iframe can't be reached
         // that way, so it listens for a postMessage from the parent page
@@ -786,6 +843,10 @@ export function createMapboxMapHtml(events: MapEvent[]) {
 
           if (data && data.type === 'retalk-map-update-events' && Array.isArray(data.events)) {
             window.updateMapEvents(data.events);
+          }
+
+          if (data && data.type === 'retalk-map-set-active-category') {
+            window.setActiveCategory(data.category);
           }
         });
 

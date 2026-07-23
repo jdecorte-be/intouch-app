@@ -80,27 +80,48 @@ function spreadCoincidentCoordinates(events: EventMapItem[]) {
 
 export function FallbackEventMap({
   events,
+  activeCategory,
   userLocation,
   onSelectEvent,
 }: {
   events: EventMapItem[];
+  activeCategory?: string;
   userLocation?: UserMapLocation | null;
   onSelectEvent: (eventId: string) => void;
 }) {
   const { width, height } = useWindowDimensions();
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
-  const displayCoordinates = useMemo(() => spreadCoincidentCoordinates(events), [events]);
+  // Pins outside the active category chip are excluded entirely, matching
+  // the Mapbox map's behavior. Groups stay on the map regardless of
+  // category — the chip only filters events.
+  const renderedEvents = useMemo(
+    () =>
+      activeCategory && activeCategory !== 'featured'
+        ? events.filter((event) => event.kind === 'group' || event.category === activeCategory)
+        : events,
+    [activeCategory, events],
+  );
+  const displayCoordinates = useMemo(() => spreadCoincidentCoordinates(renderedEvents), [renderedEvents]);
   const spanX = FALLBACK_BOUNDS.east - FALLBACK_BOUNDS.west;
   const spanY = FALLBACK_BOUNDS.north - FALLBACK_BOUNDS.south;
 
   return (
     <View style={StyleSheet.absoluteFill} backgroundColor={palette.mapWater}>
-      {events.map((event) => {
+      {renderedEvents.map((event) => {
         const coordinates = displayCoordinates.get(event.id) ?? event.coordinates;
         const x = ((coordinates[0] - FALLBACK_BOUNDS.west) / spanX) * (width - 56) + 8;
         const y =
           ((FALLBACK_BOUNDS.north - coordinates[1]) / spanY) * (height * 0.5) +
           height * 0.22;
+        // Only groups can end up here outside the active category (non-
+        // matching events are filtered out of renderedEvents entirely), so
+        // dim just those instead of hiding them.
+        const isDimmed = Boolean(
+          event.kind === 'group' &&
+            activeCategory &&
+            activeCategory !== 'featured' &&
+            event.category !== activeCategory,
+        );
 
         return (
           <Pressable
@@ -113,6 +134,7 @@ export function FallbackEventMap({
               left: x,
               top: y,
               alignItems: 'center',
+              opacity: isDimmed ? 0 : 1,
               transform: [{ scale: pressed ? 0.92 : 1 }],
             })}
           >

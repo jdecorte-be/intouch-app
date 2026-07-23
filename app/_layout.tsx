@@ -8,6 +8,7 @@ import 'react-native-reanimated';
 import { TamaguiProvider } from 'tamagui';
 
 import { AppSplashScreen } from '@/components/ui/app-splash-screen';
+import { TestingMenu } from '@/components/ui/testing-menu';
 import { shouldShowOnboarding } from '@/lib/onboarding';
 import { palette } from '@/lib/palette';
 import { canUseNativeModules } from '@/lib/runtime';
@@ -124,6 +125,7 @@ export default function RootLayout() {
             </Stack.Protected>
           </Stack>
           <StatusBar style="dark" />
+          <TestingMenu />
           {showEntrySplash ? <AppSplashScreen onFinish={finishEntrySplash} /> : null}
         </ThemeProvider>
       </TamaguiProvider>

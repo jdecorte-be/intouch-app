@@ -10,11 +10,18 @@ import { EventListPanel } from '@/components/events/event-list-panel';
 import { EventSheet } from '@/components/home/event-sheet';
 import { GreetingHeader } from '@/components/home/greeting-header';
 import { MapboxEventMap } from '@/components/home/mapbox-event-map';
+import { MapEventPreviewCard } from '@/components/home/map-event-preview-card';
 import { NotificationPopover } from '@/components/home/notification-popover';
 import type { UserMapLocation } from '@/components/home/fallback-event-map';
 import { IconlyIcon } from '@/components/icons/iconly-icon';
 import { palette } from '@/lib/palette';
-import { selectVisibleCategoryCounts, selectVisibleEvents, useEventsStore } from '@/stores/events-store';
+import type { EventItem } from '@/lib/types';
+import {
+  selectVisibleCategoryCounts,
+  selectVisibleEvents,
+  selectVisibleMapEvents,
+  useEventsStore,
+} from '@/stores/events-store';
 
 const NAV_CLEARANCE = 80;
 
@@ -28,7 +35,13 @@ export default function ExploreScreen() {
   const [keepZoomOnLocate, setKeepZoomOnLocate] = useState(true);
   const [isLocating, setIsLocating] = useState(false);
   const [userLocation, setUserLocation] = useState<UserMapLocation | null>(null);
+  const [showMapEvents, setShowMapEvents] = useState(false);
   const [visibleEventIds, setVisibleEventIds] = useState<Set<string> | null>(null);
+  // Kept set (not nulled) while the preview sheet closes, so its slide-down
+  // animation still has content to show instead of going blank mid-drag.
+  const [selectedMapEvent, setSelectedMapEvent] = useState<EventItem | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewContentHeight, setPreviewContentHeight] = useState(0);
 
   const handleVisibleEventIdsChange = (eventIds: string[]) => {
     setVisibleEventIds(new Set(eventIds));
@@ -49,6 +62,26 @@ export default function ExploreScreen() {
       eventsState.happeningNowOnly,
     ],
   );
+  // Ignores the category chip so picking a category doesn't pull every
+  // other category's pins off the map — only the list panel and chip
+  // highlight react to it.
+  const mapEvents = useMemo(
+    () => selectVisibleMapEvents(eventsState),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      eventsState.events,
+      eventsState.activityScope,
+      eventsState.selectedDayKey,
+      eventsState.maxDistanceKm,
+      eventsState.maxPriceCad,
+      eventsState.maxGroupSize,
+      eventsState.happeningNowOnly,
+    ],
+  );
+  const displayedMapEvents = useMemo(
+    () => (showMapEvents ? mapEvents : mapEvents.filter((event) => event.kind === 'group')),
+    [mapEvents, showMapEvents],
+  );
   const mapCategoryCounts = useMemo(
     () => selectVisibleCategoryCounts(eventsState, visibleEventIds),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -60,16 +93,44 @@ export default function ExploreScreen() {
       eventsState.maxPriceCad,
       eventsState.maxGroupSize,
       eventsState.happeningNowOnly,
+      showMapEvents,
       visibleEventIds,
     ],
   );
 
   const navBottom = insets.bottom + NAV_CLEARANCE;
   const sheetHeight = Math.min(windowHeight * 0.7, 620);
+  // The sheet's drag handle (paddingTop 8 + bar 4 + paddingBottom 10) sits
+  // above the scrollable content, so the sheet needs that much extra room on
+  // top of whatever height the content itself measures.
+  const SHEET_HANDLE_HEIGHT = 22;
+  const maxPreviewSheetHeight = Math.min(windowHeight - insets.top - 40, 720);
+  // Grows/shrinks to fit the preview card's actual content instead of using
+  // a fixed height, falling back to the same cap as the list sheet until the
+  // content has reported its measured size.
+  const previewSheetHeight =
+    previewContentHeight > 0
+      ? Math.min(previewContentHeight + SHEET_HANDLE_HEIGHT, maxPreviewSheetHeight)
+      : sheetHeight;
 
   const openEvent = (eventId: string) => {
     router.push(`/event/${eventId}`);
   };
+
+  // Tapping a pin shows a full detail sheet instead of navigating straight to
+  // the event screen, matching how the list sheet surfaces info first.
+  const handleMapMarkerSelect = (eventId: string) => {
+    const event = displayedMapEvents.find((item) => item.id === eventId);
+
+    if (event) {
+      setSelectedMapEvent(event);
+      setPreviewContentHeight(0);
+      setIsPreviewOpen(true);
+      setIsSheetOpen(false);
+    }
+  };
+
+  const closePreview = () => setIsPreviewOpen(false);
 
   const locateUser = async (keepZoom: boolean) => {
     if (isLocating) {
@@ -103,6 +164,14 @@ export default function ExploreScreen() {
 
   const showUserLocation = () => locateUser(false);
 
+  // Drop the preview if the pin it belongs to falls off the map — e.g. a
+  // category filter change or a map events refresh that no longer includes it.
+  useEffect(() => {
+    if (isPreviewOpen && selectedMapEvent && !displayedMapEvents.some((event) => event.id === selectedMapEvent.id)) {
+      setIsPreviewOpen(false);
+    }
+  }, [displayedMapEvents, isPreviewOpen, selectedMapEvent]);
+
   // Show the user's position on the map as soon as the screen mounts,
   // without punching in — a manual tap on the locate button still zooms in.
   useEffect(() => {
@@ -113,11 +182,12 @@ export default function ExploreScreen() {
   return (
     <View flex={1} backgroundColor={palette.white}>
       <MapboxEventMap
-        events={visibleEvents}
+        events={displayedMapEvents}
+        activeCategory={eventsState.activeCategory}
         locateRequestId={locateRequestId}
         keepZoomOnLocate={keepZoomOnLocate}
         userLocation={userLocation}
-        onSelectEvent={openEvent}
+        onSelectEvent={handleMapMarkerSelect}
         onVisibleEventIdsChange={handleVisibleEventIdsChange}
       />
 
@@ -143,7 +213,7 @@ export default function ExploreScreen() {
         />
       </YStack>
 
-      {!isSheetOpen ? (
+      {!isSheetOpen && !isPreviewOpen ? (
         <View position="absolute" bottom={navBottom - 8} left={16} pointerEvents="box-none">
           <Pressable
             accessibilityLabel="Center map on your location"
@@ -179,7 +249,7 @@ export default function ExploreScreen() {
         </View>
       ) : null}
 
-      {!isSheetOpen ? (
+      {!isSheetOpen && !isPreviewOpen ? (
         <View
           position="absolute"
           bottom={navBottom - 8}
@@ -217,7 +287,30 @@ export default function ExploreScreen() {
             </XStack>
           </Pressable>
 
-          <View position="absolute" right={16} top={0}>
+          <YStack position="absolute" right={16} top={-58} gap={8}>
+            <Pressable
+              accessibilityLabel={showMapEvents ? 'Hide events on map' : 'Show events on map'}
+              accessibilityRole="button"
+              onPress={() => setShowMapEvents((current) => !current)}
+            >
+              <View
+                width={50}
+                height={50}
+                borderRadius={999}
+                borderWidth={1}
+                borderColor={showMapEvents ? palette.primary : 'rgba(41,47,54,0.1)'}
+                backgroundColor={showMapEvents ? palette.primary : 'rgba(255,255,255,0.96)'}
+                alignItems="center"
+                justifyContent="center"
+                shadowColor="#0f172a"
+                shadowOpacity={0.1}
+                shadowRadius={14}
+                shadowOffset={{ width: 0, height: 10 }}
+                style={{ elevation: 7 }}
+              >
+                <IconlyIcon name="Ticket" size={20} color={showMapEvents ? 'white' : palette.ink} />
+              </View>
+            </Pressable>
             <Pressable onPress={() => router.push('/host')}>
               <View
                 width={50}
@@ -235,7 +328,7 @@ export default function ExploreScreen() {
                 <IconlyIcon name="Plus" size={20} color="white" />
               </View>
             </Pressable>
-          </View>
+          </YStack>
         </View>
       ) : null}
 
@@ -250,6 +343,22 @@ export default function ExploreScreen() {
           onOpenFilters={() => router.push('/filters')}
           onAvatarPress={() => router.navigate('/profile')}
         />
+      </EventSheet>
+
+      <EventSheet
+        isOpen={isPreviewOpen}
+        height={previewSheetHeight}
+        bottomOffset={navBottom}
+        onClose={closePreview}
+      >
+        {selectedMapEvent ? (
+          <MapEventPreviewCard
+            event={selectedMapEvent}
+            interestState={eventsState.interestById[selectedMapEvent.id]}
+            onClose={closePreview}
+            onContentHeightChange={setPreviewContentHeight}
+          />
+        ) : null}
       </EventSheet>
       <NotificationPopover
         visible={showNotifications}

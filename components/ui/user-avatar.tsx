@@ -1,3 +1,4 @@
+import type { ImageSource } from 'expo-image';
 import { Image } from 'expo-image';
 import { useState } from 'react';
 import { Text, View } from 'tamagui';
@@ -11,14 +12,18 @@ export function UserAvatar({
   size = 36,
   borderColor,
   borderWidth = 0,
+  accentColor,
+  initialsOverride,
 }: {
   label: string;
-  image?: string | null;
+  image?: ImageSource | string | number | null;
   size?: number;
   borderColor?: string;
   borderWidth?: number;
+  accentColor?: string;
+  initialsOverride?: string;
 }) {
-  const [failedImage, setFailedImage] = useState<string | null>(null);
+  const [failedImage, setFailedImage] = useState<ImageSource | string | number | null>(null);
 
   if (image && image !== failedImage) {
     return (
@@ -36,13 +41,12 @@ export function UserAvatar({
       width={size}
       height={size}
       borderRadius={size / 2}
-      backgroundColor={getAvatarAccent(label)}
       alignItems="center"
       justifyContent="center"
-      style={{ borderColor, borderWidth }}
+      style={{ backgroundColor: accentColor ?? getAvatarAccent(label), borderColor, borderWidth }}
     >
-      <Text color="white" fontWeight="700" fontSize={size * 0.32}>
-        {getUserInitials(label)}
+      <Text color={palette.white} fontWeight="700" fontSize={size * 0.32}>
+        {initialsOverride ?? getUserInitials(label)}
       </Text>
     </View>
   );

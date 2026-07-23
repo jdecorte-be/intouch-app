@@ -54,13 +54,29 @@ export type EventInterestState = {
   isPending: boolean;
 };
 
+export type ChatMessageReaction = {
+  emoji: string;
+  count: number;
+  reactedByMe: boolean;
+};
+
 export type ChatMessage = {
   id: string;
   author: string;
+  authorId?: string | null;
   authorImage: string | null;
   fromSelf: boolean;
   text: string;
+  image?: string | null;
   sentAt: string;
+  kind?: 'text' | 'system';
+  reactions?: ChatMessageReaction[];
+};
+
+export type ChatParticipant = {
+  id: string;
+  name: string;
+  image: string | null;
 };
 
 export type StatusUpdate = {
@@ -80,23 +96,34 @@ export type ChatThread = {
   subtitle: string;
   accent: string;
   initials: string;
+  icon?: string;
   avatarImage?: ImageSource | string | number | null;
   unreadCount: number;
   pinned?: boolean;
   tags?: ChatFilterTag[];
   eventId?: string;
+  participants: ChatParticipant[];
+  participantCount: number;
   messages: ChatMessage[];
 };
+
+export type Gender = 'woman' | 'man' | 'non-binary' | 'prefer-not-to-say';
 
 export type SessionUser = {
   id: string;
   name: string;
   email: string;
+  age?: number | null;
+  gender?: Gender | null;
+  languagesSpoken: string[];
   image?: string | null;
+  photos: string[];
   homeNeighborhood?: string | null;
+  homeCoordinates?: [number, number] | null;
   eventInterests: HostableCategory[];
   eventGoals: string[];
   memberSince: string;
+  onboardingCompletedAt?: string | null;
 };
 
 export type NotificationKind = 'comment' | 'generated' | 'invite' | 'like';
@@ -106,6 +133,7 @@ export type NotificationInviteStatus = 'pending' | 'accepted' | 'declined';
 export type NotificationItem = {
   id: string;
   actor: string;
+  actorImage?: string | null;
   time: string;
   title: string;
   detail?: string;

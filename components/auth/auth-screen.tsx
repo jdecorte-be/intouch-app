@@ -477,6 +477,7 @@ export function AuthScreen({ initialMode = 'register' }: { initialMode?: AuthMod
   const requestedMode = getRequestedAuthMode(params.mode, initialMode);
   const signIn = useSessionStore((state) => state.signIn);
   const testSignIn = useSessionStore((state) => state.testSignIn);
+  const testSignInForOnboarding = useSessionStore((state) => state.testSignInForOnboarding);
   const register = useSessionStore((state) => state.register);
   const completeGoogleAuth = useSessionStore((state) => state.completeGoogleAuth);
   const [mode, setMode] = useState<AuthMode>(requestedMode);
@@ -618,6 +619,16 @@ export function AuthScreen({ initialMode = 'register' }: { initialMode?: AuthMod
     setError(null);
     testSignIn();
     router.replace('/explore');
+  };
+
+  const handleTestOnboarding = () => {
+    if (isSubmitting) {
+      return;
+    }
+
+    setError(null);
+    testSignInForOnboarding();
+    router.replace('/onboarding');
   };
 
   return (
@@ -772,6 +783,16 @@ export function AuthScreen({ initialMode = 'register' }: { initialMode?: AuthMod
                         disabled={isSubmitting}
                         variant="soft"
                         onPress={handleTestSignIn}
+                      />
+                    ) : null}
+
+                    {!isRegister && __DEV__ ? (
+                      <SocialAuthButton
+                        icon={<IconlyIcon name="Cog" size={18} color={palette.ink} />}
+                        label="Debug: test onboarding"
+                        disabled={isSubmitting}
+                        variant="soft"
+                        onPress={handleTestOnboarding}
                       />
                     ) : null}
 

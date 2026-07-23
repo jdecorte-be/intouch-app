@@ -1,4 +1,4 @@
-import type { EventCategory, EventItem, HostableCategory } from './types';
+import type { EventCategory, EventItem, Gender, HostableCategory } from './types';
 
 export const categories: { id: EventCategory; label: string; emoji: string }[] = [
   { id: 'featured', label: 'Featured', emoji: '✨' },
@@ -111,6 +111,32 @@ export const goalOptions = [
   { value: 'go-out-tonight', label: 'Go out tonight', emoji: '🪩' },
   { value: 'learn-skills', label: 'Learn skills', emoji: '🧠' },
   { value: 'stay-local', label: 'Stay local', emoji: '📍' },
+];
+
+export const genderOptions: { value: Gender; label: string }[] = [
+  { value: 'woman', label: 'Woman' },
+  { value: 'man', label: 'Man' },
+  { value: 'non-binary', label: 'Non-binary' },
+  { value: 'prefer-not-to-say', label: 'Prefer not to say' },
+];
+
+export const languageOptions = [
+  'English',
+  'French',
+  'Spanish',
+  'Mandarin',
+  'Cantonese',
+  'Portuguese',
+  'Arabic',
+  'Hindi',
+  'Punjabi',
+  'Tagalog',
+  'Italian',
+  'German',
+  'Korean',
+  'Japanese',
+  'Vietnamese',
+  'Russian',
 ];
 
 export function formatCanadianPrice(price: string) {

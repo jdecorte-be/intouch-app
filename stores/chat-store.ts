@@ -3,19 +3,29 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 import * as api from '@/lib/api';
 import { zustandStorage } from '@/lib/storage';
-import type { ChatThread, EventItem } from '@/lib/types';
+import type { ChatMessage, ChatParticipant, ChatThread, EventItem } from '@/lib/types';
 import { useSessionStore } from '@/stores/session-store';
+
+type PollVoteState = {
+  counts: number[];
+  myVote: number | null;
+};
 
 type ChatState = {
   threads: ChatThread[];
   hasLoaded: boolean;
   error: string | null;
+  pollVotes: Record<string, PollVoteState>;
 
   loadThreads: () => Promise<void>;
   loadThreadMessages: (chatId: string) => Promise<void>;
   joinEventChat: (event: EventItem) => Promise<string>;
   startDirectChat: (memberName: string, memberUserId: string, eventId?: string) => Promise<string>;
-  sendMessage: (chatId: string, text: string, author: string) => void;
+  sendMessage: (chatId: string, text: string, author: string, image?: string | null) => void;
+  addRandomParticipantToChat: (chatId: string) => void;
+  toggleReaction: (chatId: string, messageId: string, emoji: string) => void;
+  votePoll: (messageId: string, optionIndex: number, optionCount: number) => void;
+  leaveChat: (chatId: string) => Promise<void>;
   markThreadRead: (chatId: string) => void;
   dismissError: () => void;
 };
@@ -30,11 +40,14 @@ function upsertThread(threads: ChatThread[], thread: ChatThread, replaceMessages
               subtitle: thread.subtitle,
               accent: thread.accent,
               initials: thread.initials,
+              icon: thread.icon ?? candidate.icon,
               avatarImage: thread.avatarImage ?? candidate.avatarImage,
               unreadCount: thread.unreadCount,
               pinned: thread.pinned ?? candidate.pinned,
               tags: thread.tags ?? candidate.tags,
               eventId: thread.eventId ?? candidate.eventId,
+              participants: thread.participants ?? candidate.participants,
+              participantCount: thread.participantCount ?? candidate.participantCount,
               messages:
                 replaceMessages || !candidate.messages.length ? thread.messages : candidate.messages,
             }
@@ -43,12 +56,32 @@ function upsertThread(threads: ChatThread[], thread: ChatThread, replaceMessages
     : [thread, ...threads];
 }
 
+const randomJoinParticipants: ChatParticipant[] = [
+  { id: 'test-join-maya-chen', name: 'Maya Chen', image: null },
+  { id: 'test-join-jordan-patel', name: 'Jordan Patel', image: null },
+  { id: 'test-join-sam-rivera', name: 'Sam Rivera', image: null },
+  { id: 'test-join-aisha-khan', name: 'Aisha Khan', image: null },
+  { id: 'test-join-noah-williams', name: 'Noah Williams', image: null },
+  { id: 'test-join-zoe-martin', name: 'Zoe Martin', image: null },
+  { id: 'test-join-leo-thompson', name: 'Leo Thompson', image: null },
+  { id: 'test-join-priya-shah', name: 'Priya Shah', image: null },
+];
+
+function createOverflowParticipant(chatId: string, index: number): ChatParticipant {
+  return {
+    id: `test-join-${chatId}-${Date.now()}-${index}`,
+    name: `Guest ${index + 1}`,
+    image: null,
+  };
+}
+
 export const useChatStore = create<ChatState>()(
   persist(
     (set, get) => ({
       threads: [],
       hasLoaded: false,
       error: null,
+      pollVotes: {},
 
       loadThreads: async () => {
         const token = useSessionStore.getState().token;
@@ -122,7 +155,7 @@ export const useChatStore = create<ChatState>()(
         return thread.id;
       },
 
-      sendMessage: (chatId, text, author) => {
+      sendMessage: (chatId, text, author, image) => {
         set({ error: null });
 
         const token = useSessionStore.getState().token;
@@ -130,9 +163,11 @@ export const useChatStore = create<ChatState>()(
         const optimisticMessage = {
           id: optimisticId,
           author,
+          authorId: useSessionStore.getState().user?.id ?? null,
           authorImage: null,
           fromSelf: true,
           text,
+          image: image ?? null,
           sentAt: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
         };
 
@@ -169,7 +204,7 @@ export const useChatStore = create<ChatState>()(
         }
 
         api
-          .sendChatMessage(chatId, text, token)
+          .sendChatMessage(chatId, text, token, image)
           .then((confirmedMessage) => {
             set((state) => ({
               threads: state.threads.map((thread) =>
@@ -196,7 +231,165 @@ export const useChatStore = create<ChatState>()(
                   : thread,
               ),
             }));
-          });
+        });
+      },
+
+      addRandomParticipantToChat: (chatId) => {
+        set((state) => {
+          const thread = state.threads.find((candidate) => candidate.id === chatId);
+
+          if (!thread) {
+            return state;
+          }
+
+          const existingIds = new Set(thread.participants.map((participant) => participant.id));
+          const availableParticipants = randomJoinParticipants.filter(
+            (participant) => !existingIds.has(participant.id),
+          );
+          const nextParticipant =
+            availableParticipants[Math.floor(Math.random() * availableParticipants.length)] ??
+            createOverflowParticipant(chatId, thread.participants.length);
+          const nextParticipants = [...thread.participants, nextParticipant];
+          const joinMessage: ChatMessage = {
+            id: `${chatId}-join-${nextParticipant.id}-${Date.now()}`,
+            author: nextParticipant.name,
+            authorId: nextParticipant.id,
+            authorImage: nextParticipant.image,
+            fromSelf: false,
+            text: `${nextParticipant.name} joined the chat.`,
+            sentAt: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+            kind: 'system',
+            reactions: [],
+          };
+          const updatedThread: ChatThread = {
+            ...thread,
+            participants: nextParticipants,
+            participantCount: Math.max(thread.participantCount + 1, nextParticipants.length),
+            messages: [...thread.messages, joinMessage],
+          };
+
+          return {
+            threads: state.threads.map((candidate) =>
+              candidate.id === chatId ? updatedThread : candidate,
+            ),
+          };
+        });
+      },
+
+      toggleReaction: (chatId, messageId, emoji) => {
+        const token = useSessionStore.getState().token;
+
+        if (!token) {
+          return;
+        }
+
+        const applyOptimisticToggle = (reactions: ChatMessage['reactions'] = []) => {
+          const existing = reactions.find((reaction) => reaction.emoji === emoji);
+
+          if (!existing) {
+            return [...reactions, { emoji, count: 1, reactedByMe: true }];
+          }
+
+          if (!existing.reactedByMe) {
+            return reactions.map((reaction) =>
+              reaction.emoji === emoji
+                ? { ...reaction, count: reaction.count + 1, reactedByMe: true }
+                : reaction,
+            );
+          }
+
+          return reactions
+            .map((reaction) =>
+              reaction.emoji === emoji ? { ...reaction, count: reaction.count - 1, reactedByMe: false } : reaction,
+            )
+            .filter((reaction) => reaction.count > 0);
+        };
+
+        const updateMessageReactions = (
+          threads: ChatThread[],
+          updater: (reactions: ChatMessage['reactions']) => ChatMessage['reactions'],
+        ) =>
+          threads.map((thread) =>
+            thread.id === chatId
+              ? {
+                  ...thread,
+                  messages: thread.messages.map((message) =>
+                    message.id === messageId ? { ...message, reactions: updater(message.reactions) } : message,
+                  ),
+                }
+              : thread,
+          );
+
+        let previousReactions: ChatMessage['reactions'] | undefined;
+
+        set((state) => {
+          const thread = state.threads.find((candidate) => candidate.id === chatId);
+          const message = thread?.messages.find((candidate) => candidate.id === messageId);
+          previousReactions = message?.reactions;
+
+          return { threads: updateMessageReactions(state.threads, applyOptimisticToggle) };
+        });
+
+        void (async () => {
+          try {
+            const confirmedMessage = await api.toggleChatMessageReaction(chatId, messageId, emoji, token);
+
+            set((state) => ({
+              threads: updateMessageReactions(state.threads, () => confirmedMessage.reactions),
+            }));
+          } catch {
+            set((state) => ({
+              error: "Couldn't update your reaction. Try again.",
+              threads: updateMessageReactions(state.threads, () => previousReactions ?? []),
+            }));
+          }
+        })();
+      },
+
+      votePoll: (messageId, optionIndex, optionCount) => {
+        set((state) => {
+          const existing = state.pollVotes[messageId] ?? {
+            counts: new Array(optionCount).fill(0),
+            myVote: null,
+          };
+
+          if (existing.myVote === optionIndex) {
+            return state;
+          }
+
+          const counts = [...existing.counts];
+
+          if (existing.myVote !== null) {
+            counts[existing.myVote] = Math.max(0, counts[existing.myVote] - 1);
+          }
+
+          counts[optionIndex] = (counts[optionIndex] ?? 0) + 1;
+
+          return {
+            pollVotes: {
+              ...state.pollVotes,
+              [messageId]: { counts, myVote: optionIndex },
+            },
+          };
+        });
+      },
+
+      leaveChat: async (chatId) => {
+        const token = useSessionStore.getState().token;
+
+        if (!token) {
+          return;
+        }
+
+        const previousThreads = get().threads;
+        set((state) => ({ threads: state.threads.filter((thread) => thread.id !== chatId) }));
+
+        try {
+          await api.leaveChatThread(chatId, token);
+        } catch {
+          set({ threads: previousThreads, error: "Couldn't leave the chat. Try again." });
+          throw new Error("Couldn't leave the chat. Try again.");
+        }
       },
 
       markThreadRead: (chatId) => {
@@ -220,7 +413,11 @@ export const useChatStore = create<ChatState>()(
     {
       name: 'retalk-chats',
       storage: createJSONStorage(() => zustandStorage),
-      partialize: (state) => ({ threads: state.threads, hasLoaded: state.hasLoaded }),
+      partialize: (state) => ({
+        threads: state.threads,
+        hasLoaded: state.hasLoaded,
+        pollVotes: state.pollVotes,
+      }),
     },
   ),
 );

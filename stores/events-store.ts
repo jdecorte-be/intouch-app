@@ -220,6 +220,20 @@ export function selectVisibleEvents(state: EventsState): EventItem[] {
   return scopedEvents;
 }
 
+// Same filters as selectVisibleEvents but ignores the category chip, so
+// picking a category on the map only highlights that chip (and filters the
+// list panel below) instead of pulling every other category's pins off the
+// map.
+export function selectVisibleMapEvents(state: EventsState): EventItem[] {
+  const scopedEvents = state.events.filter((event) => matchesNonCategoryFilters(event, state));
+
+  if (state.activityScope === 'popular') {
+    return [...scopedEvents].sort(sortByPopularity);
+  }
+
+  return scopedEvents;
+}
+
 // Per-category marker counts among events passing every filter except
 // category itself and currently rendered on screen (per the map's own
 // on-screen pixel-projection check — see postVisibleEventsUpdate in

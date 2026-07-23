@@ -1,26 +1,74 @@
 import { Image } from 'expo-image';
+import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, TextInput } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Alert,
+  FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  TextInput,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, View, XStack, YStack } from 'tamagui';
 
+import { AttachmentMenu } from '@/components/chat/attachment-menu';
+import { GifPickerModal } from '@/components/chat/gif-picker-modal';
+import { MessageBubble } from '@/components/chat/message-bubble';
+import { PollComposerModal } from '@/components/chat/poll-composer-modal';
+import { ReactionPicker } from '@/components/chat/reaction-picker';
 import { IconlyIcon } from '@/components/icons/iconly-icon';
 import { UserAvatar } from '@/components/ui/user-avatar';
+import { buildLocationMessageText } from '@/lib/location-share';
 import { palette } from '@/lib/palette';
+import { buildPollMessageText } from '@/lib/poll';
 import { appTextInputStyle } from '@/lib/typography';
+import type { ChatMessage } from '@/lib/types';
 import { useChatStore } from '@/stores/chat-store';
 import { useSessionStore } from '@/stores/session-store';
+
+type ReactionPickerTarget = { messageId: string; top: number; alignRight: boolean };
+
+function HeaderIconButton({
+  icon,
+  color,
+  onPress,
+}: {
+  icon: Parameters<typeof IconlyIcon>[0]['name'];
+  color?: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} hitSlop={8}>
+      <View width={34} height={34} alignItems="center" justifyContent="center">
+        <IconlyIcon name={icon} size={19} color={color ?? palette.gray} />
+      </View>
+    </Pressable>
+  );
+}
 
 export default function ChatConversationScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const scrollRef = useRef<ScrollView>(null);
+  const listRef = useRef<FlatList<ChatMessage>>(null);
   const [draft, setDraft] = useState('');
+  const [isGifPickerOpen, setIsGifPickerOpen] = useState(false);
+  const [isAttachmentMenuOpen, setIsAttachmentMenuOpen] = useState(false);
+  const [isPollComposerOpen, setIsPollComposerOpen] = useState(false);
+  const [reactionTarget, setReactionTarget] = useState<ReactionPickerTarget | null>(null);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   const thread = useChatStore((state) => state.threads.find((candidate) => candidate.id === id));
   const sendMessage = useChatStore((state) => state.sendMessage);
+  const toggleReaction = useChatStore((state) => state.toggleReaction);
+  const pollVotes = useChatStore((state) => state.pollVotes);
+  const votePoll = useChatStore((state) => state.votePoll);
+  const leaveChat = useChatStore((state) => state.leaveChat);
   const markThreadRead = useChatStore((state) => state.markThreadRead);
   const loadThreadMessages = useChatStore((state) => state.loadThreadMessages);
   const user = useSessionStore((state) => state.user);
@@ -33,10 +81,61 @@ export default function ChatConversationScreen() {
   }, [id, markThreadRead, loadThreadMessages]);
 
   useEffect(() => {
-    const timeout = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 60);
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSubscription = Keyboard.addListener(showEvent, () => setIsKeyboardVisible(true));
+    const hideSubscription = Keyboard.addListener(hideEvent, () => setIsKeyboardVisible(false));
 
-    return () => clearTimeout(timeout);
-  }, [thread?.messages.length]);
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
+
+  const openProfile = useCallback(
+    (personId?: string | null) => {
+      if (personId) {
+        router.push(`/user/${encodeURIComponent(personId)}`);
+      }
+    },
+    [router],
+  );
+
+  const openReactionPicker = useCallback(
+    (messageId: string, fromSelf: boolean, pageY: number) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      const top = Math.max(insets.top + 60, pageY - 70);
+      setReactionTarget({ messageId, top, alignRight: fromSelf });
+    },
+    [insets.top],
+  );
+
+  const likeMessage = useCallback(
+    (messageId: string) => {
+      const chatId = thread?.id;
+
+      if (!chatId) {
+        return;
+      }
+
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      toggleReaction(chatId, messageId, '❤️');
+    },
+    [thread?.id, toggleReaction],
+  );
+
+  const handleToggleReaction = useCallback(
+    (messageId: string, emoji: string) => {
+      const chatId = thread?.id;
+
+      if (!chatId) {
+        return;
+      }
+
+      toggleReaction(chatId, messageId, emoji);
+    },
+    [thread?.id, toggleReaction],
+  );
 
   if (!thread) {
     return (
@@ -64,129 +163,239 @@ export default function ChatConversationScreen() {
     setDraft('');
   };
 
+  const sendImageMessage = (imageUri: string) => {
+    sendMessage(thread.id, '', user?.name || user?.email || 'You', imageUri);
+  };
+
+  const pickImageFromLibrary = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert('Permission needed', 'Allow photo library access to send a picture.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      sendImageMessage(result.assets[0].uri);
+    }
+  };
+
+  const shareLocation = async () => {
+    const permission = await Location.requestForegroundPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert('Permission needed', 'Allow location access to share where you are.');
+      return;
+    }
+
+    try {
+      const position = await Location.getCurrentPositionAsync({});
+      sendMessage(
+        thread.id,
+        buildLocationMessageText(position.coords.latitude, position.coords.longitude),
+        user?.name || user?.email || 'You',
+      );
+    } catch {
+      Alert.alert("Couldn't get your location", 'Please try again.');
+    }
+  };
+
+  const createPoll = (question: string, options: string[]) => {
+    setIsPollComposerOpen(false);
+    sendMessage(thread.id, buildPollMessageText(question, options), user?.name || user?.email || 'You');
+  };
+
+  const openHeaderTarget = () => {
+    if (thread.kind === 'direct') {
+      openProfile(thread.participants.find((participant) => participant.id !== user?.id)?.id);
+    } else if (thread.eventId) {
+      router.push(`/event/${thread.eventId}`);
+    }
+  };
+
+  const reportChat = () => {
+    Alert.alert('Report this chat?', 'Let us know something is wrong and we’ll take a look.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Report',
+        style: 'destructive',
+        onPress: () => Alert.alert('Reported', "Thanks, we'll take a look."),
+      },
+    ]);
+  };
+
+  const showChatInfo = () => {
+    const names = thread.participants.map((participant) => participant.name).join(', ') || 'No one yet';
+    Alert.alert(`${thread.participantCount} participant${thread.participantCount === 1 ? '' : 's'}`, names);
+  };
+
+  const selectReaction = (emoji: string) => {
+    if (reactionTarget) {
+      toggleReaction(thread.id, reactionTarget.messageId, emoji);
+    }
+    setReactionTarget(null);
+  };
+
+  const confirmLeaveChat = () => {
+    Alert.alert('Leave this chat?', `You’ll stop receiving messages from ${thread.title}.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Leave',
+        style: 'destructive',
+        onPress: () => {
+          leaveChat(thread.id)
+            .then(() => router.back())
+            .catch(() => Alert.alert("Couldn't leave", 'Please try again.'));
+        },
+      },
+    ]);
+  };
+
+  const previewParticipants = thread.participants.slice(0, 3);
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View flex={1} backgroundColor={palette.white}>
         {/* Header */}
-        <XStack
-          alignItems="center"
-          gap={10}
+        <YStack
           borderBottomWidth={1}
-          borderColor="rgba(41,47,54,0.1)"
-          backgroundColor="white"
+          borderColor={palette.border}
+          backgroundColor={palette.white}
           paddingHorizontal={12}
           paddingTop={insets.top + 8}
           paddingBottom={12}
+          gap={8}
         >
-          <Pressable onPress={() => router.back()} hitSlop={8}>
-            <View width={36} height={36} borderRadius={18} alignItems="center" justifyContent="center">
-              <IconlyIcon name="ArrowLeft" size={18} color={palette.gray} />
-            </View>
-          </Pressable>
-          <View
-            width={40}
-            height={40}
-            borderRadius={12}
-            style={{ backgroundColor: thread.accent }}
-            alignItems="center"
-            justifyContent="center"
-          >
-            {thread.avatarImage ? (
-              <Image
-                source={thread.avatarImage}
-                style={{ width: 40, height: 40, borderRadius: 12 }}
-                contentFit="cover"
-              />
-            ) : (
-              <Text color="white" fontWeight="700" fontSize={12}>
-                {thread.initials}
-              </Text>
-            )}
-          </View>
-          <YStack flex={1} minWidth={0}>
-            <Text fontSize={15} fontWeight="700" color={palette.ink} numberOfLines={1}>
-              {thread.title}
-            </Text>
-            <Text fontSize={12} fontWeight="600" color={palette.gray} numberOfLines={1}>
-              {thread.subtitle}
-            </Text>
-          </YStack>
-        </XStack>
+          <XStack alignItems="center" gap={10}>
+            <Pressable onPress={() => router.back()} hitSlop={8}>
+              <View width={36} height={36} borderRadius={18} alignItems="center" justifyContent="center">
+                <IconlyIcon name="ArrowLeft" size={18} color={palette.gray} />
+              </View>
+            </Pressable>
+            <Pressable onPress={openHeaderTarget} hitSlop={4} style={{ flex: 1, minWidth: 0 }}>
+              <YStack flex={1} minWidth={0} gap={3}>
+                <XStack alignItems="center" gap={6}>
+                  {thread.icon ? (
+                    <Text fontSize={18}>{thread.icon}</Text>
+                  ) : (
+                    <View
+                      width={28}
+                      height={28}
+                      borderRadius={9}
+                      style={{ backgroundColor: thread.accent }}
+                      alignItems="center"
+                      justifyContent="center"
+                    >
+                      {thread.avatarImage ? (
+                        <Image
+                          source={thread.avatarImage}
+                          style={{ width: 28, height: 28, borderRadius: 9 }}
+                          contentFit="cover"
+                        />
+                      ) : (
+                        <Text color={palette.white} fontWeight="700" fontSize={10}>
+                          {thread.initials}
+                        </Text>
+                      )}
+                    </View>
+                  )}
+                  <Text fontSize={15} fontWeight="700" color={palette.ink} numberOfLines={1} flexShrink={1}>
+                    {thread.title}
+                  </Text>
+                </XStack>
+                {thread.kind !== 'direct' && previewParticipants.length ? (
+                  <XStack alignItems="center" gap={6}>
+                    <XStack>
+                      {previewParticipants.map((participant, index) => (
+                        <Pressable
+                          key={participant.id}
+                          onPress={() => openProfile(participant.id)}
+                          hitSlop={4}
+                          style={{ marginLeft: index === 0 ? 0 : -8 }}
+                        >
+                          <View borderWidth={1.5} borderColor={palette.white} borderRadius={11}>
+                            <UserAvatar label={participant.name} image={participant.image} size={18} />
+                          </View>
+                        </Pressable>
+                      ))}
+                    </XStack>
+                    <Text fontSize={12} fontWeight="600" color={palette.gray} numberOfLines={1}>
+                      {thread.participantCount} participant{thread.participantCount === 1 ? '' : 's'}
+                    </Text>
+                  </XStack>
+                ) : (
+                  <Text fontSize={12} fontWeight="600" color={palette.gray} numberOfLines={1}>
+                    {thread.subtitle}
+                  </Text>
+                )}
+              </YStack>
+            </Pressable>
+            {thread.kind === 'event' ? (
+              <HeaderIconButton icon="ArrowOutRightCircleHalf" color={palette.danger} onPress={confirmLeaveChat} />
+            ) : null}
+            <HeaderIconButton icon="Danger" onPress={reportChat} />
+            <HeaderIconButton icon="InfoCircle" onPress={showChatInfo} />
+          </XStack>
+        </YStack>
 
         {/* Messages */}
-        <ScrollView
-          ref={scrollRef}
-          contentContainerStyle={{ padding: 16, gap: 12 }}
+        <FlatList
+          ref={listRef}
+          data={thread.messages}
+          keyExtractor={(message) => message.id}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: 16, gap: 12, flexGrow: 1 }}
           keyboardShouldPersistTaps="handled"
-        >
-          {thread.messages.length ? (
-            thread.messages.map((message) => (
-              <XStack
-                key={message.id}
-                justifyContent={message.fromSelf ? 'flex-end' : 'flex-start'}
-                alignItems="flex-end"
-                gap={8}
-              >
-                {!message.fromSelf ? (
-                  <UserAvatar label={message.author} image={message.authorImage} size={26} />
-                ) : null}
-                <YStack
-                  maxWidth="72%"
-                  borderRadius={16}
-                  borderBottomRightRadius={message.fromSelf ? 6 : 16}
-                  borderBottomLeftRadius={message.fromSelf ? 16 : 6}
-                  backgroundColor={message.fromSelf ? palette.ink : 'white'}
-                  borderWidth={message.fromSelf ? 0 : 1}
-                  borderColor="rgba(41,47,54,0.1)"
-                  paddingHorizontal={14}
-                  paddingVertical={10}
-                >
-                  {!message.fromSelf ? (
-                    <Text fontSize={11} fontWeight="700" color={palette.silver} marginBottom={4}>
-                      {message.author}
-                    </Text>
-                  ) : null}
-                  <Text fontSize={14} lineHeight={20} color={message.fromSelf ? 'white' : palette.ink}>
-                    {message.text}
-                  </Text>
-                  <Text
-                    fontSize={10}
-                    fontWeight="600"
-                    marginTop={4}
-                    color={message.fromSelf ? 'rgba(255,255,255,0.6)' : palette.muted}
-                  >
-                    {message.sentAt}
-                  </Text>
-                </YStack>
-              </XStack>
-            ))
-          ) : (
+          initialNumToRender={20}
+          onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
+          onLayout={() => {
+            if (isKeyboardVisible) {
+              listRef.current?.scrollToEnd({ animated: false });
+            }
+          }}
+          renderItem={({ item }) => (
+            <MessageBubble
+              message={item}
+              pollVoteState={pollVotes[item.id]}
+              onOpenProfile={openProfile}
+              onOpenReactionPicker={openReactionPicker}
+              onLikeMessage={likeMessage}
+              onToggleReaction={handleToggleReaction}
+              onVotePoll={votePoll}
+            />
+          )}
+          ListEmptyComponent={
             <Text paddingVertical={24} textAlign="center" fontSize={14} lineHeight={22} color={palette.gray}>
               No messages yet. Say hi to {thread.title}!
             </Text>
-          )}
-        </ScrollView>
+          }
+        />
 
         {/* Composer */}
         <XStack
           alignItems="center"
           gap={8}
           borderTopWidth={1}
-          borderColor="rgba(41,47,54,0.1)"
-          backgroundColor="white"
+          borderColor={palette.border}
+          backgroundColor={palette.white}
           padding={12}
-          paddingBottom={insets.bottom + 12}
+          paddingBottom={isKeyboardVisible ? 12 : insets.bottom + 12}
         >
           <View
             flex={1}
             height={44}
             borderRadius={999}
             borderWidth={1}
-            borderColor="rgba(41,47,54,0.1)"
-            backgroundColor="white"
+            borderColor={palette.border}
+            backgroundColor={palette.white}
             paddingHorizontal={16}
             justifyContent="center"
           >
@@ -200,21 +409,57 @@ export default function ChatConversationScreen() {
               returnKeyType="send"
             />
           </View>
-          <Pressable onPress={submit} disabled={!draft.trim()}>
-            <View
-              width={44}
-              height={44}
-              borderRadius={22}
-              backgroundColor={palette.ink}
-              alignItems="center"
-              justifyContent="center"
-              opacity={draft.trim() ? 1 : 0.4}
-            >
-              <IconlyIcon name="Send" size={18} color="white" />
+          <Pressable onPress={() => setIsAttachmentMenuOpen(true)} hitSlop={6}>
+            <View width={40} height={40} alignItems="center" justifyContent="center">
+              <IconlyIcon name="Plus" size={22} color={palette.gray} />
             </View>
           </Pressable>
+          {draft.trim() ? (
+            <Pressable onPress={submit}>
+              <View
+                width={64}
+                height={44}
+                borderRadius={12}
+                backgroundColor={palette.primary}
+                alignItems="center"
+                justifyContent="center"
+              >
+                <IconlyIcon name="Send" size={24} color={palette.white} />
+              </View>
+            </Pressable>
+          ) : null}
         </XStack>
       </View>
+
+      <GifPickerModal
+        visible={isGifPickerOpen}
+        onClose={() => setIsGifPickerOpen(false)}
+        onSelect={(gifUrl) => {
+          setIsGifPickerOpen(false);
+          sendImageMessage(gifUrl);
+        }}
+      />
+
+      <AttachmentMenu
+        visible={isAttachmentMenuOpen}
+        onClose={() => setIsAttachmentMenuOpen(false)}
+        onPickImage={pickImageFromLibrary}
+        onOpenGifPicker={() => setIsGifPickerOpen(true)}
+        onShareLocation={() => void shareLocation()}
+        onCreatePoll={() => setIsPollComposerOpen(true)}
+      />
+
+      <PollComposerModal
+        visible={isPollComposerOpen}
+        onClose={() => setIsPollComposerOpen(false)}
+        onSubmit={createPoll}
+      />
+
+      <ReactionPicker
+        target={reactionTarget}
+        onSelect={selectReaction}
+        onClose={() => setReactionTarget(null)}
+      />
     </KeyboardAvoidingView>
   );
 }

@@ -36,6 +36,7 @@ function parseMapMessage(data: unknown): MapMessage | null {
 
 export function MapboxEventMap({
   events,
+  activeCategory,
   locateRequestId,
   keepZoomOnLocate,
   userLocation,
@@ -43,6 +44,7 @@ export function MapboxEventMap({
   onVisibleEventIdsChange,
 }: {
   events: EventMapItem[];
+  activeCategory?: string;
   locateRequestId?: number;
   keepZoomOnLocate?: boolean;
   userLocation?: UserMapLocation | null;
@@ -77,6 +79,13 @@ export function MapboxEventMap({
   useEffect(() => {
     sendEventsUpdate(events);
   }, [events, sendEventsUpdate]);
+
+  useEffect(() => {
+    postMapMessage(frameRef.current?.contentWindow, {
+      type: 'retalk-map-set-active-category',
+      category: activeCategory ?? 'featured',
+    });
+  }, [activeCategory]);
 
   useEffect(() => {
     const handleMessage = (message: MessageEvent) => {
@@ -114,6 +123,7 @@ export function MapboxEventMap({
     return (
       <FallbackEventMap
         events={events}
+        activeCategory={activeCategory}
         userLocation={userLocation}
         onSelectEvent={onSelectEvent}
       />
@@ -125,6 +135,10 @@ export function MapboxEventMap({
       ref={frameRef}
       onLoad={() => {
         sendEventsUpdate(events);
+        postMapMessage(frameRef.current?.contentWindow, {
+          type: 'retalk-map-set-active-category',
+          category: activeCategory ?? 'featured',
+        });
 
         if (userLocation) {
           centerMap(userLocation, { keepZoom: true });

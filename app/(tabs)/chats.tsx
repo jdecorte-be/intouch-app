@@ -5,9 +5,9 @@ import { Alert, Pressable, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, View, XStack, YStack } from 'tamagui';
 
+import { ChatSearchRow } from '@/components/chat/chat-search-row';
 import { SearchBar } from '@/components/events/search-bar';
 import { IconlyIcon } from '@/components/icons/iconly-icon';
-import { UserAvatar } from '@/components/ui/user-avatar';
 import { palette } from '@/lib/palette';
 import type { PersonSearchResult } from '@/lib/search-utils';
 import { searchPeople } from '@/lib/search-utils';
@@ -17,12 +17,12 @@ import { useEventsStore } from '@/stores/events-store';
 
 type ChatFilterKey = 'all' | 'groups' | ChatFilterTag;
 
-const CHAT_FILTERS: { key: ChatFilterKey; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'favorites', label: 'Favorites' },
-  { key: 'work', label: 'Work' },
-  { key: 'groups', label: 'Groups' },
-  { key: 'community', label: 'Community' },
+const CHAT_FILTERS: { key: ChatFilterKey; label: string; emoji: string }[] = [
+  { key: 'all', label: 'All', emoji: '💬' },
+  { key: 'favorites', label: 'Favorites', emoji: '⭐' },
+  { key: 'work', label: 'Work', emoji: '💼' },
+  { key: 'groups', label: 'Groups', emoji: '👥' },
+  { key: 'community', label: 'Community', emoji: '🌐' },
 ];
 
 export default function ChatsScreen() {
@@ -35,41 +35,71 @@ export default function ChatsScreen() {
   const dismissError = useChatStore((state) => state.dismissError);
   const events = useEventsStore((state) => state.events);
   const [selectedFilter, setSelectedFilter] = useState<ChatFilterKey>('all');
-  const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const isSearching = searchQuery.trim().length > 0;
+  const [isComposing, setIsComposing] = useState(false);
+  const [composeQuery, setComposeQuery] = useState('');
 
   const openThread = (chatId: string) => {
     markThreadRead(chatId);
+    setSearchQuery('');
     router.push(`/chat/${chatId}`);
   };
 
-  const openSearch = () => setIsSearching(true);
-
-  const closeSearch = () => {
-    setIsSearching(false);
-    setSearchQuery('');
+  const closeCompose = () => {
+    setIsComposing(false);
+    setComposeQuery('');
   };
 
-  const userResults = useMemo(
-    () => (searchQuery.trim() ? searchPeople(events, searchQuery) : []),
-    [events, searchQuery],
-  );
+  const threadResults = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
 
-  const messagePerson = async (person: PersonSearchResult) => {
+    if (!normalizedQuery) {
+      return [];
+    }
+
+    return threads.filter((thread) => {
+      const lastMessage = thread.messages[thread.messages.length - 1];
+      return (
+        thread.title.toLowerCase().includes(normalizedQuery) ||
+        thread.subtitle.toLowerCase().includes(normalizedQuery) ||
+        (lastMessage?.text.toLowerCase().includes(normalizedQuery) ?? false)
+      );
+    });
+  }, [threads, searchQuery]);
+
+  const userResults = useMemo(() => {
+    if (!searchQuery.trim()) {
+      return [];
+    }
+
+    const existingTitles = new Set(threadResults.map((thread) => thread.title.toLowerCase()));
+
+    return searchPeople(events, searchQuery).filter(
+      (person) => !existingTitles.has(person.name.toLowerCase()),
+    );
+  }, [events, searchQuery, threadResults]);
+
+  const startConversation = async (person: PersonSearchResult, reset: () => void) => {
     if (!person.userId) {
-      closeSearch();
+      reset();
       router.push(`/user/${encodeURIComponent(person.key)}`);
       return;
     }
 
     try {
       const chatId = await startDirectChat(person.name, person.userId);
-      closeSearch();
+      reset();
       router.push(`/chat/${chatId}`);
     } catch {
       Alert.alert("Couldn't start chat", 'Please try again.');
     }
   };
+
+  const composeResults = useMemo(
+    () => (composeQuery.trim() ? searchPeople(events, composeQuery) : []),
+    [events, composeQuery],
+  );
 
   const shortcutThreads = threads.filter((thread) => thread.kind === 'direct').slice(0, 8);
 
@@ -85,98 +115,48 @@ export default function ChatsScreen() {
 
   return (
     <View flex={1} backgroundColor={palette.white}>
-      {isSearching ? (
-        <XStack
-          alignItems="center"
-          gap={10}
-          paddingHorizontal={16}
-          paddingTop={insets.top + 8}
-          paddingBottom={10}
+      <XStack
+        alignItems="center"
+        justifyContent="space-between"
+        paddingHorizontal={16}
+        paddingTop={insets.top + 8}
+        paddingBottom={6}
+      >
+        <Text fontSize={28} fontWeight="800" color={palette.ink}>
+          Chats
+        </Text>
+        <Pressable
+          onPress={() => setIsComposing(true)}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Find someone to message"
         >
-          <Pressable onPress={closeSearch} hitSlop={8} accessibilityRole="button" accessibilityLabel="Close search">
-            <View width={36} height={36} borderRadius={18} alignItems="center" justifyContent="center">
-              <IconlyIcon name="ArrowLeft" size={18} color={palette.ink} />
-            </View>
-          </Pressable>
-          <View flex={1}>
-            <SearchBar
-              query={searchQuery}
-              placeholder="Search people"
-              autoFocus
-              onQueryChange={setSearchQuery}
-            />
+          <View
+            width={38}
+            height={38}
+            borderRadius={19}
+            alignItems="center"
+            justifyContent="center"
+            backgroundColor={palette.fog}
+          >
+            <IconlyIcon name="Edit" size={18} color={palette.ink} />
           </View>
-        </XStack>
-      ) : (
-        <XStack
-          alignItems="center"
-          justifyContent="space-between"
-          paddingHorizontal={16}
-          paddingTop={insets.top + 8}
-          paddingBottom={6}
-        >
-          <Text fontSize={28} fontWeight="800" color={palette.ink}>
-            Chats
-          </Text>
-          <XStack alignItems="center" gap={20}>
-            <Pressable onPress={openSearch} hitSlop={8} accessibilityRole="button" accessibilityLabel="Search people">
-              <IconlyIcon name="Search" size={22} color={palette.ink} />
-            </Pressable>
-          </XStack>
-        </XStack>
-      )}
+        </Pressable>
+      </XStack>
 
-      {isSearching ? (
-        <ScrollView
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 40 }}
-          keyboardShouldPersistTaps="handled"
-        >
-          {searchQuery.trim() === '' ? (
-            <YStack alignItems="center" paddingTop={60} gap={4}>
-              <Text fontSize={14} fontWeight="700" color={palette.ink}>
-                Find people to message
-              </Text>
-              <Text fontSize={13} color={palette.gray}>
-                Search by name.
-              </Text>
-            </YStack>
-          ) : userResults.length === 0 ? (
-            <YStack alignItems="center" paddingTop={60} gap={4}>
-              <Text fontSize={14} fontWeight="700" color={palette.ink}>
-                No people found
-              </Text>
-              <Text fontSize={13} color={palette.gray}>
-                Try a different name.
-              </Text>
-            </YStack>
-          ) : (
-            <YStack gap={2} paddingTop={8}>
-              {userResults.map((person) => (
-                <Pressable key={person.key} onPress={() => messagePerson(person)}>
-                  <XStack alignItems="center" gap={12} borderRadius={18} padding={10}>
-                    <UserAvatar label={person.name} image={person.image} size={48} />
-                    <YStack flex={1} minWidth={0} gap={3}>
-                      <Text fontSize={14} fontWeight="800" color={palette.ink} numberOfLines={1}>
-                        {person.name}
-                      </Text>
-                      <Text fontSize={12} fontWeight="600" color={palette.gray} numberOfLines={1}>
-                        {person.role} · {person.event.title}
-                      </Text>
-                    </YStack>
-                    <IconlyIcon name="MessageCircleDots" size={18} color={palette.primary} />
-                  </XStack>
-                </Pressable>
-              ))}
-            </YStack>
-          )}
-        </ScrollView>
-      ) : (
-        <>
+      <View paddingHorizontal={16} paddingVertical={10}>
+        <SearchBar
+          query={searchQuery}
+          placeholder="Search chats and people"
+          onQueryChange={setSearchQuery}
+        />
+      </View>
+
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         style={{ flexGrow: 0 }}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 16, gap: 16 }}
+        contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 4, gap: 16 }}
       >
         {shortcutThreads.map((thread) => {
           const firstName = thread.title.split(' ')[0] ?? thread.title;
@@ -191,10 +171,10 @@ export default function ChatsScreen() {
                     borderRadius={18}
                     style={{
                       backgroundColor: thread.accent,
-                      shadowColor: '#292f36',
-                      shadowOpacity: 0.12,
+                      shadowColor: palette.ink,
+                      shadowOpacity: 0.1,
                       shadowRadius: 6,
-                      shadowOffset: { width: 0, height: 3 },
+                      shadowOffset: { width: 0, height: 2 },
                       elevation: 2,
                     }}
                     alignItems="center"
@@ -207,7 +187,7 @@ export default function ChatsScreen() {
                         contentFit="cover"
                       />
                     ) : (
-                      <Text color="white" fontWeight="700" fontSize={16}>
+                      <Text color={palette.white} fontWeight="700" fontSize={16}>
                         {thread.initials}
                       </Text>
                     )}
@@ -225,9 +205,9 @@ export default function ChatsScreen() {
                       alignItems="center"
                       justifyContent="center"
                       borderWidth={2}
-                      borderColor="white"
+                      borderColor={palette.white}
                     >
-                      <Text color="white" fontSize={10} fontWeight="800">
+                      <Text color={palette.white} fontSize={10} fontWeight="800">
                         {thread.unreadCount}
                       </Text>
                     </View>
@@ -259,8 +239,8 @@ export default function ChatsScreen() {
                 borderRadius={999}
                 backgroundColor={selected ? palette.primary : palette.fog}
               >
-                <Text fontSize={14} fontWeight="700" color={selected ? 'white' : palette.slate}>
-                  {filter.label}
+                <Text fontSize={14} fontWeight="700" color={selected ? palette.white : palette.slate}>
+                  {filter.emoji} {filter.label}
                 </Text>
               </View>
             </Pressable>
@@ -272,19 +252,86 @@ export default function ChatsScreen() {
         <XStack
           alignItems="center"
           justifyContent="space-between"
-          backgroundColor={palette.coralSoft}
+          backgroundColor={palette.dangerSoft}
           paddingHorizontal={16}
           paddingVertical={10}
         >
-          <Text fontSize={12} fontWeight="700" color="#c0392b">
+          <Text fontSize={12} fontWeight="700" color={palette.dangerText}>
             {error}
           </Text>
           <Pressable onPress={dismissError} hitSlop={8}>
-            <IconlyIcon name="X" size={14} color="#c0392b" />
+            <IconlyIcon name="X" size={14} color={palette.dangerText} />
           </Pressable>
         </XStack>
       ) : null}
 
+      {isSearching ? (
+        <ScrollView
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 40 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {threadResults.length === 0 && userResults.length === 0 ? (
+            <YStack alignItems="center" paddingTop={40} gap={4}>
+              <Text fontSize={14} fontWeight="700" color={palette.ink}>
+                No results found
+              </Text>
+              <Text fontSize={13} color={palette.gray}>
+                Try a different name.
+              </Text>
+            </YStack>
+          ) : (
+            <YStack gap={16} paddingTop={8}>
+              {threadResults.length > 0 ? (
+                <YStack gap={2}>
+                  <Text fontSize={12} fontWeight="800" color={palette.gray} paddingHorizontal={10}>
+                    CHATS
+                  </Text>
+                  {threadResults.map((thread) => {
+                    const lastMessage = thread.messages[thread.messages.length - 1];
+
+                    return (
+                      <ChatSearchRow
+                        key={thread.id}
+                        avatarLabel={thread.title}
+                        avatarImage={thread.avatarImage}
+                        avatarAccent={thread.accent}
+                        avatarInitials={thread.initials}
+                        title={thread.title}
+                        subtitle={
+                          lastMessage
+                            ? `${lastMessage.fromSelf ? 'You: ' : ''}${lastMessage.text}`
+                            : thread.subtitle
+                        }
+                        icon="ChevronRight"
+                        onPress={() => openThread(thread.id)}
+                      />
+                    );
+                  })}
+                </YStack>
+              ) : null}
+
+              {userResults.length > 0 ? (
+                <YStack gap={2}>
+                  <Text fontSize={12} fontWeight="800" color={palette.gray} paddingHorizontal={10}>
+                    PEOPLE
+                  </Text>
+                  {userResults.map((person) => (
+                    <ChatSearchRow
+                      key={person.key}
+                      avatarLabel={person.name}
+                      avatarImage={person.image}
+                      title={person.name}
+                      subtitle={`${person.role} · ${person.event.title}`}
+                      icon="MessageCircleDots"
+                      onPress={() => startConversation(person, () => setSearchQuery(''))}
+                    />
+                  ))}
+                </YStack>
+              ) : null}
+            </YStack>
+          )}
+        </ScrollView>
+      ) : (
       <View flex={1}>
         {threads.length === 0 ? (
           <ScrollView
@@ -295,7 +342,7 @@ export default function ChatsScreen() {
               <View width={48} height={48} borderRadius={12} backgroundColor={palette.fog} alignItems="center" justifyContent="center">
                 <IconlyIcon name="MessageCircleDots" size={20} color={palette.slate} />
               </View>
-              <Text fontSize={16} fontWeight="700" color={palette.ink} marginTop={8}>
+              <Text fontSize={16} fontWeight="700" color={palette.ink} textAlign="center" marginTop={8}>
                 No chats yet
               </Text>
               <Text fontSize={14} lineHeight={22} color={palette.gray} textAlign="center">
@@ -318,13 +365,13 @@ export default function ChatsScreen() {
           >
             <YStack
               borderRadius={16}
-              backgroundColor="white"
+              backgroundColor={palette.white}
               overflow="hidden"
-              shadowColor="#292f36"
-              shadowOpacity={0.06}
-              shadowRadius={12}
-              shadowOffset={{ width: 0, height: 4 }}
-              elevation={2}
+              shadowColor={palette.ink}
+              shadowOpacity={0.08}
+              shadowRadius={16}
+              shadowOffset={{ width: 0, height: 6 }}
+              elevation={3}
             >
               {visibleThreads.map((thread, index) => {
                 const lastMessage = thread.messages[thread.messages.length - 1];
@@ -338,7 +385,7 @@ export default function ChatsScreen() {
                       gap={12}
                       paddingHorizontal={14}
                       paddingVertical={12}
-                      backgroundColor={isUnread ? palette.primarySoft : 'white'}
+                      backgroundColor={isUnread ? palette.primarySoft : palette.white}
                       borderBottomWidth={isLast ? 0 : 1}
                       borderBottomColor={palette.line}
                     >
@@ -358,7 +405,7 @@ export default function ChatsScreen() {
                               contentFit="cover"
                             />
                           ) : (
-                            <Text color="white" fontWeight="700" fontSize={14}>
+                            <Text color={palette.white} fontWeight="700" fontSize={14}>
                               {thread.initials}
                             </Text>
                           )}
@@ -374,7 +421,7 @@ export default function ChatsScreen() {
                           alignItems="center"
                           justifyContent="center"
                           borderWidth={2}
-                          borderColor="white"
+                          borderColor={palette.white}
                         >
                           <IconlyIcon
                             name={thread.kind === 'event' ? 'Group' : 'User'}
@@ -423,7 +470,7 @@ export default function ChatsScreen() {
                             ) : null}
                             {isUnread ? (
                               <View width={20} height={20} borderRadius={10} backgroundColor={palette.primary} alignItems="center" justifyContent="center">
-                                <Text color="white" fontSize={11} fontWeight="700">
+                                <Text color={palette.white} fontSize={11} fontWeight="700">
                                   {thread.unreadCount}
                                 </Text>
                               </View>
@@ -439,8 +486,79 @@ export default function ChatsScreen() {
           </ScrollView>
         )}
       </View>
-        </>
       )}
+
+      {isComposing ? (
+        <View
+          position="absolute"
+          top={0}
+          left={0}
+          right={0}
+          bottom={0}
+          backgroundColor={palette.white}
+        >
+          <XStack
+            alignItems="center"
+            gap={10}
+            paddingHorizontal={16}
+            paddingTop={insets.top + 8}
+            paddingBottom={10}
+          >
+            <Pressable onPress={closeCompose} hitSlop={8} accessibilityRole="button" accessibilityLabel="Close">
+              <View width={36} height={36} borderRadius={18} alignItems="center" justifyContent="center">
+                <IconlyIcon name="ArrowLeft" size={18} color={palette.ink} />
+              </View>
+            </Pressable>
+            <View flex={1}>
+              <SearchBar
+                query={composeQuery}
+                placeholder="Search people to message"
+                autoFocus
+                onQueryChange={setComposeQuery}
+              />
+            </View>
+          </XStack>
+
+          <ScrollView
+            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: insets.bottom + 40 }}
+            keyboardShouldPersistTaps="handled"
+          >
+            {composeQuery.trim() === '' ? (
+              <YStack alignItems="center" paddingTop={60} gap={4}>
+                <Text fontSize={14} fontWeight="700" color={palette.ink}>
+                  Find someone to message
+                </Text>
+                <Text fontSize={13} color={palette.gray}>
+                  Search by name.
+                </Text>
+              </YStack>
+            ) : composeResults.length === 0 ? (
+              <YStack alignItems="center" paddingTop={60} gap={4}>
+                <Text fontSize={14} fontWeight="700" color={palette.ink}>
+                  No people found
+                </Text>
+                <Text fontSize={13} color={palette.gray}>
+                  Try a different name.
+                </Text>
+              </YStack>
+            ) : (
+              <YStack gap={2} paddingTop={8}>
+                {composeResults.map((person) => (
+                  <ChatSearchRow
+                    key={person.key}
+                    avatarLabel={person.name}
+                    avatarImage={person.image}
+                    title={person.name}
+                    subtitle={`${person.role} · ${person.event.title}`}
+                    icon="MessageCircleDots"
+                    onPress={() => startConversation(person, closeCompose)}
+                  />
+                ))}
+              </YStack>
+            )}
+          </ScrollView>
+        </View>
+      ) : null}
     </View>
   );
 }

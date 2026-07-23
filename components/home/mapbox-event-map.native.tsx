@@ -26,6 +26,7 @@ function parseMapMessage(data: string): MapMessage | null {
 
 export function MapboxEventMap({
   events,
+  activeCategory,
   locateRequestId,
   keepZoomOnLocate,
   userLocation,
@@ -33,6 +34,7 @@ export function MapboxEventMap({
   onVisibleEventIdsChange,
 }: {
   events: EventMapItem[];
+  activeCategory?: string;
   locateRequestId?: number;
   keepZoomOnLocate?: boolean;
   userLocation?: UserMapLocation | null;
@@ -78,6 +80,17 @@ export function MapboxEventMap({
   }, [events, sendEventsUpdate]);
 
   useEffect(() => {
+    webViewRef.current?.injectJavaScript(`
+      (function () {
+        if (window.setActiveCategory) {
+          window.setActiveCategory(${JSON.stringify(activeCategory ?? 'featured')});
+        }
+      })();
+      true;
+    `);
+  }, [activeCategory]);
+
+  useEffect(() => {
     if (!locateRequestId || !mapboxAccessToken || !userLocation) {
       return;
     }
@@ -89,6 +102,7 @@ export function MapboxEventMap({
     return (
       <FallbackEventMap
         events={events}
+        activeCategory={activeCategory}
         userLocation={userLocation}
         onSelectEvent={onSelectEvent}
       />
@@ -115,6 +129,14 @@ export function MapboxEventMap({
       javaScriptEnabled
       onLoadEnd={() => {
         sendEventsUpdate(events);
+        webViewRef.current?.injectJavaScript(`
+          (function () {
+            if (window.setActiveCategory) {
+              window.setActiveCategory(${JSON.stringify(activeCategory ?? 'featured')});
+            }
+          })();
+          true;
+        `);
 
         if (userLocation) {
           centerOnUserLocation(userLocation, { keepZoom: true });

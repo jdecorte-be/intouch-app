@@ -21,9 +21,10 @@ type SessionState = {
   loadSession: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<void>;
   testSignIn: () => void;
+  testSignInForOnboarding: () => void;
   register: (name: string, email: string, password: string) => Promise<void>;
   completeGoogleAuth: (token: string) => Promise<void>;
-  completeOnboarding: (changes: OnboardingProfileChanges) => void;
+  completeOnboarding: (changes: OnboardingProfileChanges) => Promise<void>;
   updateProfile: (changes: Partial<SessionUser>) => void;
   refreshMyActivity: () => Promise<void>;
   signOut: () => void;
@@ -41,8 +42,13 @@ const testUser: SessionUser = {
   id: 'test-user-local',
   name: 'Test User',
   email: 'test@retalk.local',
+  age: 27,
+  gender: 'prefer-not-to-say',
+  languagesSpoken: ['English'],
   image: null,
+  photos: [],
   homeNeighborhood: 'Queen West',
+  homeCoordinates: null,
   eventInterests: ['social', 'art', 'party'],
   eventGoals: ['meet-new-people', 'go-out-tonight'],
   memberSince: 'July 2026',
@@ -125,6 +131,37 @@ export const useSessionStore = create<SessionState>()(
         });
       },
 
+      // Debug-only helper (see the "Debug: test onboarding" button on the
+      // login screen) that drops the test user back to a blank, incomplete
+      // profile so the onboarding flow can be replayed on demand instead of
+      // only being reachable once, on a brand-new account.
+      testSignInForOnboarding: () => {
+        const { [testUser.id]: _removedOverride, ...remainingOverrides } = get().profileOverrides;
+
+        set({
+          token: null,
+          user: {
+            ...testUser,
+            name: '',
+            age: null,
+            gender: null,
+            languagesSpoken: [],
+            image: null,
+            photos: [],
+            homeNeighborhood: null,
+            homeCoordinates: null,
+            eventInterests: [],
+            onboardingCompletedAt: null,
+          },
+          profileOverrides: remainingOverrides,
+          completedOnboardingUserIds: get().completedOnboardingUserIds.filter((id) => id !== testUser.id),
+          hostedEvents: [],
+          hostedGroups: [],
+          interestedEvents: [],
+          interestedGroups: [],
+        });
+      },
+
       register: async (name, email, password) => {
         const { token, user } = await api.registerWithCredentials(name, email, password);
         set({ token, user: applyProfileOverrides(user, get().profileOverrides) });
@@ -137,8 +174,8 @@ export const useSessionStore = create<SessionState>()(
         void get().refreshMyActivity();
       },
 
-      completeOnboarding: (changes) => {
-        const user = get().user;
+      completeOnboarding: async (changes) => {
+        const { user, token } = get();
 
         if (!user) {
           return;
@@ -148,8 +185,28 @@ export const useSessionStore = create<SessionState>()(
           ? get().completedOnboardingUserIds
           : [...get().completedOnboardingUserIds, user.id];
 
-        get().updateProfile(changes);
-        set({ completedOnboardingUserIds });
+        // Real accounts persist onboarding to the backend (onboardingCompletedAt),
+        // so completion survives reinstalls and devices where local storage
+        // doesn't stick (Expo Go/web fall back to in-memory storage). The
+        // token-less local test user has no backend record, so it only gets
+        // the local completedOnboardingUserIds fallback.
+        if (!token) {
+          get().updateProfile(changes);
+          set({ completedOnboardingUserIds });
+          return;
+        }
+
+        const updatedUser = await api.completeOnboarding(token, changes);
+        const profileOverrides = {
+          ...get().profileOverrides,
+          [user.id]: { ...get().profileOverrides[user.id], ...changes },
+        };
+
+        set({
+          user: applyProfileOverrides(updatedUser, profileOverrides),
+          profileOverrides,
+          completedOnboardingUserIds,
+        });
       },
 
       updateProfile: (changes) => {

@@ -10,7 +10,9 @@
     "newArchEnabled": true,
     "ios": {
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "ReTalk uses your location to center the event map near you."
+        "NSLocationWhenInUseUsageDescription": "ReTalk uses your location to center the event map near you.",
+        "NSPhotoLibraryUsageDescription": "ReTalk needs access to your photos so you can set a profile picture and add photos to your profile.",
+        "NSCameraUsageDescription": "ReTalk needs access to your camera so you can take a profile picture."
       },
       "supportsTablet": true
     },
@@ -24,7 +26,9 @@
       "edgeToEdgeEnabled": true,
       "permissions": [
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION"
+        "ACCESS_FINE_LOCATION",
+        "CAMERA",
+        "READ_MEDIA_IMAGES"
       ],
       "predictiveBackGestureEnabled": false,
       "package": "com.jdecorte.ReTalkApp"
@@ -45,6 +49,13 @@
           "dark": {
             "backgroundColor": "#e3e6ec"
           }
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "ReTalk needs access to your photos so you can set a profile picture and add photos to your profile.",
+          "cameraPermission": "ReTalk needs access to your camera so you can take a profile picture."
         }
       ]
     ],

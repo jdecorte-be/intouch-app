@@ -278,7 +278,7 @@ function NotificationRow({
         backgroundColor={notification.unread ? palette.primarySoft : 'transparent'}
       >
         <View>
-          <UserAvatar label={notification.actor} size={46} />
+          <UserAvatar label={notification.actor} image={notification.actorImage} size={46} />
           <View
             position="absolute"
             right={-2}
