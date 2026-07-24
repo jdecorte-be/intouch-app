@@ -555,10 +555,10 @@ export async function sendChatMessage(
   return toChatMessage(messages[messages.length - 1]);
 }
 
-export async function markChatThreadRead(threadId: string, token: string): Promise<void> {
+export async function markChatThreadRead(threadId: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/chats/${threadId}/read`, {
     method: 'POST',
-    headers: authHeaders(token),
+    headers: jsonHeaders(),
   });
 
   if (!response.ok) {
@@ -570,11 +570,10 @@ export async function toggleChatMessageReaction(
   threadId: string,
   messageId: string,
   emoji: string,
-  token: string,
 ): Promise<ChatMessage> {
   const response = await fetch(`${API_BASE_URL}/chats/${threadId}/messages/${messageId}/reactions`, {
     method: 'POST',
-    headers: authHeaders(token),
+    headers: jsonHeaders(),
     body: JSON.stringify({ emoji }),
   });
 
@@ -594,10 +593,10 @@ export async function toggleChatMessageReaction(
   return toChatMessage(message);
 }
 
-export async function leaveChatThread(threadId: string, token: string): Promise<void> {
+export async function leaveChatThread(threadId: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}/chats/${threadId}/leave`, {
     method: 'POST',
-    headers: authHeaders(token),
+    headers: jsonHeaders(),
   });
 
   if (!response.ok) {

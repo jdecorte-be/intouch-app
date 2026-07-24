@@ -77,15 +77,15 @@ export const useNotificationsStore = create<NotificationsState>()(
           return;
         }
 
-        const token = useSessionStore.getState().token;
+        const hasSession = useSessionStore.getState().hasSession;
 
-        if (!token) {
+        if (!hasSession) {
           set({ hasLoaded: true });
           return;
         }
 
         try {
-          const notifications = await api.fetchNotifications(token);
+          const notifications = await api.fetchNotifications();
           set({ notifications, hasLoaded: true });
         } catch {
           set({ hasLoaded: true });
@@ -99,10 +99,10 @@ export const useNotificationsStore = create<NotificationsState>()(
           ),
         }));
 
-        const token = useSessionStore.getState().token;
+        const hasSession = useSessionStore.getState().hasSession;
 
-        if (token) {
-          api.markNotificationRead(token, id).catch(() => {});
+        if (hasSession) {
+          api.markNotificationRead(id).catch(() => {});
         }
       },
 
@@ -111,10 +111,10 @@ export const useNotificationsStore = create<NotificationsState>()(
           notifications: state.notifications.map((item) => (item.unread ? { ...item, unread: false } : item)),
         }));
 
-        const token = useSessionStore.getState().token;
+        const hasSession = useSessionStore.getState().hasSession;
 
-        if (token) {
-          api.markAllNotificationsRead(token).catch(() => {});
+        if (hasSession) {
+          api.markAllNotificationsRead().catch(() => {});
         }
       },
 

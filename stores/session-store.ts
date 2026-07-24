@@ -1,3 +1,4 @@
+import SuperTokens from 'supertokens-react-native';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
@@ -10,7 +11,10 @@ type ProfileOverrides = Record<string, Partial<SessionUser>>;
 
 type SessionState = {
   user: SessionUser | null;
-  token: string | null;
+  // Whether `user` is backed by a real SuperTokens session (vs. the local,
+  // token-less test user) — SuperTokens manages the actual session tokens
+  // itself, so the app never sees or stores them directly.
+  hasSession: boolean;
   isLoading: boolean;
   completedOnboardingUserIds: string[];
   profileOverrides: ProfileOverrides;
@@ -23,11 +27,15 @@ type SessionState = {
   testSignIn: () => void;
   testSignInForOnboarding: () => void;
   register: (name: string, email: string, password: string) => Promise<void>;
-  completeGoogleAuth: (token: string) => Promise<void>;
+  completeGoogleAuth: (
+    code: string,
+    state: string | null,
+    redirectURIOnProviderDashboard: string,
+  ) => Promise<void>;
   completeOnboarding: (changes: OnboardingProfileChanges) => Promise<void>;
   updateProfile: (changes: Partial<SessionUser>) => void;
   refreshMyActivity: () => Promise<void>;
-  signOut: () => void;
+  signOut: () => Promise<void>;
 };
 
 function applyProfileOverrides(user: SessionUser | null, overrides: ProfileOverrides) {
@@ -58,7 +66,7 @@ export const useSessionStore = create<SessionState>()(
   persist(
     (set, get) => ({
       user: null,
-      token: null,
+      hasSession: false,
       isLoading: false,
       completedOnboardingUserIds: [],
       profileOverrides: {},
@@ -72,9 +80,9 @@ export const useSessionStore = create<SessionState>()(
           return;
         }
 
-        const { token, user } = get();
+        const { hasSession, user } = get();
 
-        if (!token) {
+        if (!hasSession) {
           return;
         }
 
@@ -82,10 +90,10 @@ export const useSessionStore = create<SessionState>()(
           // Already have a cached session — revalidate in the background so
           // startup never blocks on a network round trip.
           void api
-            .fetchSession(token)
+            .fetchSession()
             .then((freshUser) => {
               if (!freshUser) {
-                set({ user: null, token: null });
+                set({ user: null, hasSession: false });
               } else {
                 set({ user: applyProfileOverrides(freshUser, get().profileOverrides) });
               }
@@ -99,10 +107,10 @@ export const useSessionStore = create<SessionState>()(
         set({ isLoading: true });
 
         try {
-          const freshUser = await api.fetchSession(token);
+          const freshUser = await api.fetchSession();
           set({
-            user: applyProfileOverrides(freshUser, get().profileOverrides),
-            token: freshUser ? token : null,
+            user: freshUser ? applyProfileOverrides(freshUser, get().profileOverrides) : null,
+            hasSession: Boolean(freshUser),
             isLoading: false,
           });
           void get().refreshMyActivity();
@@ -112,14 +120,14 @@ export const useSessionStore = create<SessionState>()(
       },
 
       signIn: async (email, password) => {
-        const { token, user } = await api.signInWithCredentials(email, password);
-        set({ token, user: applyProfileOverrides(user, get().profileOverrides) });
+        const user = await api.signInWithCredentials(email, password);
+        set({ hasSession: true, user: applyProfileOverrides(user, get().profileOverrides) });
         void get().refreshMyActivity();
       },
 
       testSignIn: () => {
         set({
-          token: null,
+          hasSession: false,
           user: applyProfileOverrides(testUser, get().profileOverrides),
           completedOnboardingUserIds: get().completedOnboardingUserIds.includes(testUser.id)
             ? get().completedOnboardingUserIds
@@ -139,7 +147,7 @@ export const useSessionStore = create<SessionState>()(
         const { [testUser.id]: _removedOverride, ...remainingOverrides } = get().profileOverrides;
 
         set({
-          token: null,
+          hasSession: false,
           user: {
             ...testUser,
             name: '',
@@ -163,19 +171,22 @@ export const useSessionStore = create<SessionState>()(
       },
 
       register: async (name, email, password) => {
-        const { token, user } = await api.registerWithCredentials(name, email, password);
-        set({ token, user: applyProfileOverrides(user, get().profileOverrides) });
+        const user = await api.registerWithCredentials(name, email, password);
+        set({ hasSession: true, user: applyProfileOverrides(user, get().profileOverrides) });
         void get().refreshMyActivity();
       },
 
-      completeGoogleAuth: async (token) => {
-        const { token: sessionToken, user } = await api.completeGoogleSignIn(token);
-        set({ token: sessionToken, user: applyProfileOverrides(user, get().profileOverrides) });
+      completeGoogleAuth: async (code, state, redirectURIOnProviderDashboard) => {
+        const user = await api.completeGoogleSignIn(redirectURIOnProviderDashboard, {
+          code,
+          ...(state ? { state } : {}),
+        });
+        set({ hasSession: true, user: applyProfileOverrides(user, get().profileOverrides) });
         void get().refreshMyActivity();
       },
 
       completeOnboarding: async (changes) => {
-        const { user, token } = get();
+        const { user, hasSession } = get();
 
         if (!user) {
           return;
@@ -188,15 +199,15 @@ export const useSessionStore = create<SessionState>()(
         // Real accounts persist onboarding to the backend (onboardingCompletedAt),
         // so completion survives reinstalls and devices where local storage
         // doesn't stick (Expo Go/web fall back to in-memory storage). The
-        // token-less local test user has no backend record, so it only gets
+        // session-less local test user has no backend record, so it only gets
         // the local completedOnboardingUserIds fallback.
-        if (!token) {
+        if (!hasSession) {
           get().updateProfile(changes);
           set({ completedOnboardingUserIds });
           return;
         }
 
-        const updatedUser = await api.completeOnboarding(token, changes);
+        const updatedUser = await api.completeOnboarding(changes);
         const profileOverrides = {
           ...get().profileOverrides,
           [user.id]: { ...get().profileOverrides[user.id], ...changes },
@@ -229,14 +240,12 @@ export const useSessionStore = create<SessionState>()(
       },
 
       refreshMyActivity: async () => {
-        const token = get().token;
-
-        if (!token) {
+        if (!get().hasSession) {
           return;
         }
 
         try {
-          const activity = await api.fetchMe(token);
+          const activity = await api.fetchMe();
           set(activity);
         } catch {
           // Keep whatever activity data is already cached; the profile
@@ -244,16 +253,14 @@ export const useSessionStore = create<SessionState>()(
         }
       },
 
-      signOut: () => {
-        const token = get().token;
-
-        if (token) {
-          void api.signOutRemote(token);
+      signOut: async () => {
+        if (get().hasSession) {
+          await SuperTokens.signOut().catch(() => {});
         }
 
         set({
           user: null,
-          token: null,
+          hasSession: false,
           hostedEvents: [],
           hostedGroups: [],
           interestedEvents: [],
@@ -266,7 +273,7 @@ export const useSessionStore = create<SessionState>()(
       storage: createJSONStorage(() => zustandStorage),
       partialize: (state) => ({
         user: state.user,
-        token: state.token,
+        hasSession: state.hasSession,
         completedOnboardingUserIds: state.completedOnboardingUserIds,
         profileOverrides: state.profileOverrides,
       }),

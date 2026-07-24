@@ -18,7 +18,7 @@ import { Text, View, XStack, YStack } from 'tamagui';
 
 import { IconlyIcon } from '@/components/icons/iconly-icon';
 import { UserAvatar } from '@/components/ui/user-avatar';
-import { AuthApiError, GOOGLE_SIGN_IN_URL } from '@/lib/api';
+import { AuthApiError, getGoogleAuthorisationUrl } from '@/lib/api';
 import { palette } from '@/lib/palette';
 import { appTextInputStyle } from '@/lib/typography';
 import { useSessionStore } from '@/stores/session-store';
@@ -583,7 +583,12 @@ export function AuthScreen({ initialMode = 'register' }: { initialMode?: AuthMod
     setIsSubmitting(true);
 
     try {
-      const result = await WebBrowser.openAuthSessionAsync(GOOGLE_SIGN_IN_URL, GOOGLE_AUTH_REDIRECT_URL);
+      // SuperTokens' thirdparty flow: ask the backend for Google's
+      // authorisation URL (it owns the client id/secret), send the user
+      // through it, then hand the callback's code/state back to the
+      // backend's /signinup route to finish the sign-in.
+      const authorisationUrl = await getGoogleAuthorisationUrl(GOOGLE_AUTH_REDIRECT_URL);
+      const result = await WebBrowser.openAuthSessionAsync(authorisationUrl, GOOGLE_AUTH_REDIRECT_URL);
 
       if (result.type !== 'success' || !result.url) {
         return;
@@ -596,13 +601,13 @@ export function AuthScreen({ initialMode = 'register' }: { initialMode?: AuthMod
         throw new AuthApiError(oauthError);
       }
 
-      const token = searchParams.get('token');
+      const code = searchParams.get('code');
 
-      if (!token) {
+      if (!code) {
         throw new AuthApiError('NoSession');
       }
 
-      await completeGoogleAuth(token);
+      await completeGoogleAuth(code, searchParams.get('state'), GOOGLE_AUTH_REDIRECT_URL);
       router.replace('/explore');
     } catch (err) {
       setError(describeError(err, 'Google sign-in failed. Please try again.'));

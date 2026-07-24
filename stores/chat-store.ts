@@ -84,15 +84,15 @@ export const useChatStore = create<ChatState>()(
       pollVotes: {},
 
       loadThreads: async () => {
-        const token = useSessionStore.getState().token;
+        const hasSession = useSessionStore.getState().hasSession;
 
-        if (!token) {
+        if (!hasSession) {
           set({ hasLoaded: true });
           return;
         }
 
         try {
-          const threads = await api.fetchChatThreads(token);
+          const threads = await api.fetchChatThreads();
           set((state) => ({
             // Keep any threads created locally before the fetch resolved.
             threads: threads.reduce((acc, thread) => upsertThread(acc, thread), state.threads),
@@ -106,14 +106,14 @@ export const useChatStore = create<ChatState>()(
       },
 
       loadThreadMessages: async (chatId) => {
-        const token = useSessionStore.getState().token;
+        const hasSession = useSessionStore.getState().hasSession;
 
-        if (!token) {
+        if (!hasSession) {
           return;
         }
 
         try {
-          const thread = await api.fetchChatThread(chatId, token);
+          const thread = await api.fetchChatThread(chatId);
           set((state) => ({ threads: upsertThread(state.threads, thread, true) }));
         } catch {
           // Keep whatever messages are already cached locally for this thread.
@@ -121,7 +121,7 @@ export const useChatStore = create<ChatState>()(
       },
 
       joinEventChat: async (event) => {
-        const token = useSessionStore.getState().token;
+        const hasSession = useSessionStore.getState().hasSession;
         const existing = get().threads.find(
           (thread) => thread.kind === 'event' && thread.eventId === event.id,
         );
@@ -130,11 +130,11 @@ export const useChatStore = create<ChatState>()(
           return existing.id;
         }
 
-        if (!token) {
+        if (!hasSession) {
           throw new Error('You need to sign in to join this chat.');
         }
 
-        const thread = await api.joinEventChat(event, token);
+        const thread = await api.joinEventChat(event);
         set((state) => ({ threads: upsertThread(state.threads, thread) }));
 
         return thread.id;
@@ -143,13 +143,13 @@ export const useChatStore = create<ChatState>()(
       startDirectChat: async (memberName, memberUserId, eventId) => {
         set({ error: null });
 
-        const token = useSessionStore.getState().token;
+        const hasSession = useSessionStore.getState().hasSession;
 
-        if (!token) {
+        if (!hasSession) {
           throw new Error('You need to sign in to start this chat.');
         }
 
-        const thread = await api.startDirectChat(memberName, memberUserId, token, eventId);
+        const thread = await api.startDirectChat(memberName, memberUserId, eventId);
         set((state) => ({ threads: upsertThread(state.threads, thread) }));
 
         return thread.id;
@@ -158,7 +158,7 @@ export const useChatStore = create<ChatState>()(
       sendMessage: (chatId, text, author, image) => {
         set({ error: null });
 
-        const token = useSessionStore.getState().token;
+        const hasSession = useSessionStore.getState().hasSession;
         const optimisticId = `${chatId}-${Date.now()}`;
         const optimisticMessage = {
           id: optimisticId,
@@ -188,7 +188,7 @@ export const useChatStore = create<ChatState>()(
           };
         });
 
-        if (!token) {
+        if (!hasSession) {
           set((state) => ({
             error: "Your message didn't send. Try again.",
             threads: state.threads.map((thread) =>
@@ -204,7 +204,7 @@ export const useChatStore = create<ChatState>()(
         }
 
         api
-          .sendChatMessage(chatId, text, token, image)
+          .sendChatMessage(chatId, text, image)
           .then((confirmedMessage) => {
             set((state) => ({
               threads: state.threads.map((thread) =>
@@ -277,9 +277,9 @@ export const useChatStore = create<ChatState>()(
       },
 
       toggleReaction: (chatId, messageId, emoji) => {
-        const token = useSessionStore.getState().token;
+        const hasSession = useSessionStore.getState().hasSession;
 
-        if (!token) {
+        if (!hasSession) {
           return;
         }
 
@@ -332,7 +332,7 @@ export const useChatStore = create<ChatState>()(
 
         void (async () => {
           try {
-            const confirmedMessage = await api.toggleChatMessageReaction(chatId, messageId, emoji, token);
+            const confirmedMessage = await api.toggleChatMessageReaction(chatId, messageId, emoji);
 
             set((state) => ({
               threads: updateMessageReactions(state.threads, () => confirmedMessage.reactions),
@@ -375,9 +375,9 @@ export const useChatStore = create<ChatState>()(
       },
 
       leaveChat: async (chatId) => {
-        const token = useSessionStore.getState().token;
+        const hasSession = useSessionStore.getState().hasSession;
 
-        if (!token) {
+        if (!hasSession) {
           return;
         }
 
@@ -385,7 +385,7 @@ export const useChatStore = create<ChatState>()(
         set((state) => ({ threads: state.threads.filter((thread) => thread.id !== chatId) }));
 
         try {
-          await api.leaveChatThread(chatId, token);
+          await api.leaveChatThread(chatId);
         } catch {
           set({ threads: previousThreads, error: "Couldn't leave the chat. Try again." });
           throw new Error("Couldn't leave the chat. Try again.");
@@ -401,10 +401,10 @@ export const useChatStore = create<ChatState>()(
           ),
         }));
 
-        const token = useSessionStore.getState().token;
+        const hasSession = useSessionStore.getState().hasSession;
 
-        if (token) {
-          api.markChatThreadRead(chatId, token).catch(() => {});
+        if (hasSession) {
+          api.markChatThreadRead(chatId).catch(() => {});
         }
       },
 

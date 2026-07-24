@@ -12,6 +12,7 @@ import { TestingMenu } from '@/components/ui/testing-menu';
 import { shouldShowOnboarding } from '@/lib/onboarding';
 import { palette } from '@/lib/palette';
 import { canUseNativeModules } from '@/lib/runtime';
+import { initSuperTokens } from '@/lib/supertokens';
 import { useChatStore } from '@/stores/chat-store';
 import { useEventsStore } from '@/stores/events-store';
 import { useNotificationsStore } from '@/stores/notifications-store';
@@ -23,6 +24,7 @@ export const unstable_settings = {
 };
 
 void SplashScreen.preventAutoHideAsync();
+initSuperTokens();
 
 if (canUseNativeModules) {
   SplashScreen.setOptions({
