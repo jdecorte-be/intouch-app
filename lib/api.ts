@@ -15,8 +15,12 @@ import type {
 // (no /api/mobile prefix) — see ../retalk-api/src/*/*.controller.ts.
 
 const NETWORK_DELAY_MS = 250;
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://retalk.live';
-export const GOOGLE_SIGN_IN_URL = `${API_BASE_URL}/auth/google?client=mobile`;
+export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://api.retalk.live';
+
+// SuperTokens' default REST contract (supertokens-node, apiBasePath "/auth").
+// Session tokens are attached to every fetch() call automatically by the
+// global fetch patch installed in lib/supertokens.ts — nothing here passes
+// a bearer token by hand.
 
 function delay<T>(value: T): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), NETWORK_DELAY_MS));
@@ -52,7 +56,7 @@ type SerializedSessionUser = {
 function toSessionUser(user: SerializedSessionUser): SessionUser {
   return {
     id: user.id,
-    name: user.name?.trim() || user.email.split('@')[0] || 'ReTalk Member',
+    name: user.name?.trim() || user.email.split('@')[0] || 'InTouch Member',
     email: user.email,
     age: user.age ?? null,
     gender: (user.gender as SessionUser['gender']) ?? null,
@@ -68,89 +72,169 @@ function toSessionUser(user: SerializedSessionUser): SessionUser {
   };
 }
 
+// Status codes come straight off SuperTokens' emailpassword/thirdparty/session
+// recipe responses (see https://supertokens.com/docs custom UI guides).
 const authErrorMessages: Record<string, string> = {
-  CredentialsMissing: 'Enter your email and password to continue.',
-  CredentialsInvalid: 'That email and password combination is incorrect.',
-  PasswordTooShort: 'Use a password with at least 8 characters.',
-  EmailAlreadyRegistered: 'An account with that email already exists.',
+  WRONG_CREDENTIALS_ERROR: 'That email and password combination is incorrect.',
+  FIELD_ERROR: 'Check the highlighted field and try again.',
+  SIGN_IN_UP_NOT_ALLOWED: 'This account cannot sign in right now. Please contact support.',
+  RESET_PASSWORD_INVALID_TOKEN_ERROR: 'This reset link is invalid or has expired.',
+  NO_EMAIL_GIVEN_BY_PROVIDER_ERROR: 'Google did not share an email address for that account.',
   NoSession: 'Sign-in did not complete. Please try again.',
   OAuthNotConfigured: 'Google sign-in is not available right now.',
+  Unknown: 'Something went wrong. Please try again.',
 };
 
 export class AuthApiError extends Error {
   code: string;
 
-  constructor(code: string) {
-    super(authErrorMessages[code] ?? 'Something went wrong. Please try again.');
+  constructor(code: string, message?: string) {
+    super(message ?? authErrorMessages[code] ?? authErrorMessages.Unknown);
     this.code = code;
   }
 }
 
-async function parseAuthResponse(response: Response): Promise<{ token: string; user: SessionUser }> {
+type FormField = { id: string; value: string };
+type SuperTokensUser = { id: string; emails?: string[] };
+
+// POSTs to SuperTokens' emailpassword /signup or /signin routes. On success
+// the backend's response sets the session tokens, which the global fetch
+// patch (lib/supertokens.ts) picks up automatically — the caller still has
+// to follow up with fetchSession() to get the app's enriched profile, since
+// the SuperTokens user object only carries id/emails.
+async function submitEmailPasswordForm(
+  path: 'signup' | 'signin',
+  formFields: FormField[],
+): Promise<SuperTokensUser> {
+  const response = await fetch(`${API_BASE_URL}/auth/${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ formFields }),
+  });
+
   const body = await response.json().catch(() => null);
 
-  if (!response.ok || !body?.token || !body?.user) {
-    throw new AuthApiError(body?.error ?? 'Unknown');
+  if (!response.ok || !body) {
+    throw new AuthApiError('Unknown');
   }
 
-  return { token: body.token, user: toSessionUser(body.user) };
-}
-
-export async function signInWithCredentials(email: string, password: string) {
-  const response = await fetch(`${API_BASE_URL}/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password }),
-  });
-
-  return parseAuthResponse(response);
-}
-
-export async function registerWithCredentials(name: string, email: string, password: string) {
-  const response = await fetch(`${API_BASE_URL}/auth/register`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, email, password }),
-  });
-
-  return parseAuthResponse(response);
-}
-
-export async function requestPasswordReset(email: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/auth/password-reset/request`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
-  });
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new AuthApiError(body?.error ?? 'Unknown');
+  if (body.status === 'FIELD_ERROR') {
+    throw new AuthApiError('FIELD_ERROR', body.formFields?.[0]?.error);
   }
+
+  if (body.status !== 'OK') {
+    throw new AuthApiError(body.status ?? 'Unknown');
+  }
+
+  return body.user;
 }
 
-export async function completeGoogleSignIn(token: string) {
-  const user = await fetchSession(token);
+export async function signInWithCredentials(email: string, password: string): Promise<SessionUser> {
+  await submitEmailPasswordForm('signin', [
+    { id: 'email', value: email },
+    { id: 'password', value: password },
+  ]);
+
+  const user = await fetchSession();
 
   if (!user) {
     throw new AuthApiError('NoSession');
   }
 
-  return { token, user };
+  return user;
 }
 
-// Resolves the current user for a stored bearer token. Returns null only
-// when the backend explicitly rejects the token (expired/revoked); network
-// failures throw so callers can keep the locally cached session instead of
-// signing the user out while offline.
-export async function fetchSession(token: string | null): Promise<SessionUser | null> {
-  if (!token) {
-    return null;
+export async function registerWithCredentials(
+  name: string,
+  email: string,
+  password: string,
+): Promise<SessionUser> {
+  await submitEmailPasswordForm('signup', [
+    { id: 'name', value: name },
+    { id: 'email', value: email },
+    { id: 'password', value: password },
+  ]);
+
+  const user = await fetchSession();
+
+  if (!user) {
+    throw new AuthApiError('NoSession');
   }
 
-  const response = await fetch(`${API_BASE_URL}/auth/session`, {
-    headers: { Authorization: `Bearer ${token}` },
+  return user;
+}
+
+export async function requestPasswordReset(email: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/auth/user/password/reset/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ formFields: [{ id: 'email', value: email }] }),
   });
+
+  const body = await response.json().catch(() => null);
+
+  if (!response.ok || !body) {
+    throw new AuthApiError('Unknown');
+  }
+
+  if (body.status === 'FIELD_ERROR') {
+    throw new AuthApiError('FIELD_ERROR', body.formFields?.[0]?.error);
+  }
+}
+
+// Kicks off SuperTokens' thirdparty flow: asks the backend for the Google
+// authorisation URL (it holds the client id/secret) so the app never sees
+// them, then the caller opens it in a WebBrowser auth session.
+export async function getGoogleAuthorisationUrl(redirectURIOnProviderDashboard: string): Promise<string> {
+  const response = await fetch(
+    `${API_BASE_URL}/auth/authorisationurl?thirdPartyId=google&redirectURIOnProviderDashboard=${encodeURIComponent(redirectURIOnProviderDashboard)}`,
+  );
+
+  const body = await response.json().catch(() => null);
+
+  if (!response.ok || body?.status !== 'OK' || !body.urlWithQueryParams) {
+    throw new AuthApiError('OAuthNotConfigured');
+  }
+
+  return body.urlWithQueryParams as string;
+}
+
+// Finishes the thirdparty flow by handing the provider's callback query
+// params (code, state, ...) to SuperTokens' /signinup route.
+export async function completeGoogleSignIn(
+  redirectURIOnProviderDashboard: string,
+  redirectURIQueryParams: Record<string, string>,
+): Promise<SessionUser> {
+  const response = await fetch(`${API_BASE_URL}/auth/signinup`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      thirdPartyId: 'google',
+      redirectURIInfo: { redirectURIOnProviderDashboard, redirectURIQueryParams },
+    }),
+  });
+
+  const body = await response.json().catch(() => null);
+
+  if (!response.ok || body?.status !== 'OK') {
+    throw new AuthApiError(body?.status ?? 'Unknown');
+  }
+
+  const user = await fetchSession();
+
+  if (!user) {
+    throw new AuthApiError('NoSession');
+  }
+
+  return user;
+}
+
+// Resolves the current user from the app's own session endpoint. Returns
+// null only when the backend explicitly says there's no session (401);
+// network failures throw so callers can keep the locally cached session
+// instead of signing the user out while offline.
+export async function fetchSession(): Promise<SessionUser | null> {
+  const response = await fetch(`${API_BASE_URL}/auth/session`);
 
   if (response.status === 401) {
     return null;
@@ -169,13 +253,10 @@ export async function fetchSession(token: string | null): Promise<SessionUser | 
 // PATCH /auth/onboarding) so completion is tracked server-side via
 // onboardingCompletedAt, rather than only in local device storage — the
 // same endpoint mobile's "edit profile" flow reuses to update these fields.
-export async function completeOnboarding(
-  token: string,
-  changes: OnboardingProfileChanges,
-): Promise<SessionUser> {
+export async function completeOnboarding(changes: OnboardingProfileChanges): Promise<SessionUser> {
   const response = await fetch(`${API_BASE_URL}/auth/onboarding`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       name: changes.name,
       age: changes.age ?? undefined,
@@ -208,10 +289,8 @@ export type MobileMe = {
 
 // Bundles the signed-in user's own hosted events/groups and the ones
 // they've marked interest in, for the profile screen.
-export async function fetchMe(token: string): Promise<MobileMe> {
-  const response = await fetch(`${API_BASE_URL}/me`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+export async function fetchMe(): Promise<MobileMe> {
+  const response = await fetch(`${API_BASE_URL}/me`);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch profile activity: ${response.status}`);
@@ -225,13 +304,6 @@ export async function fetchMe(token: string): Promise<MobileMe> {
     interestedEvents: body.interestedEvents ?? [],
     interestedGroups: body.interestedGroups ?? [],
   };
-}
-
-export async function signOutRemote(token: string): Promise<void> {
-  await fetch(`${API_BASE_URL}/auth/logout`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-  }).catch(() => {});
 }
 
 // The icon/color pairing for a notification is a presentation concern tied
@@ -266,10 +338,8 @@ function toNotification(raw: any): NotificationItem {
   };
 }
 
-export async function fetchNotifications(token: string): Promise<NotificationItem[]> {
-  const response = await fetch(`${API_BASE_URL}/notifications`, {
-    headers: authHeaders(token),
-  });
+export async function fetchNotifications(): Promise<NotificationItem[]> {
+  const response = await fetch(`${API_BASE_URL}/notifications`);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch notifications: ${response.status}`);
@@ -281,17 +351,17 @@ export async function fetchNotifications(token: string): Promise<NotificationIte
   return (notifications as any[]).map(toNotification);
 }
 
-export async function markNotificationRead(token: string, id: string): Promise<void> {
+export async function markNotificationRead(id: string): Promise<void> {
   await fetch(`${API_BASE_URL}/notifications/${id}/read`, {
     method: 'PATCH',
-    headers: authHeaders(token),
+    headers: jsonHeaders(),
   });
 }
 
-export async function markAllNotificationsRead(token: string): Promise<void> {
+export async function markAllNotificationsRead(): Promise<void> {
   await fetch(`${API_BASE_URL}/notifications/read-all`, {
     method: 'POST',
-    headers: authHeaders(token),
+    headers: jsonHeaders(),
   });
 }
 
@@ -310,8 +380,8 @@ function initialsFrom(name: string) {
     .join('');
 }
 
-function authHeaders(token: string) {
-  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+function jsonHeaders() {
+  return { 'Content-Type': 'application/json' };
 }
 
 // The mobile chat endpoints return thread/message objects that are already
@@ -376,10 +446,8 @@ function toChatThread(raw: any): ChatThread {
   };
 }
 
-export async function fetchChatThreads(token: string): Promise<ChatThread[]> {
-  const response = await fetch(`${API_BASE_URL}/chats`, {
-    headers: authHeaders(token),
-  });
+export async function fetchChatThreads(): Promise<ChatThread[]> {
+  const response = await fetch(`${API_BASE_URL}/chats`);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch chats: ${response.status}`);
@@ -391,10 +459,8 @@ export async function fetchChatThreads(token: string): Promise<ChatThread[]> {
   return (threads as any[]).map(toChatThread);
 }
 
-export async function fetchChatThread(threadId: string, token: string): Promise<ChatThread> {
-  const response = await fetch(`${API_BASE_URL}/chats/${threadId}`, {
-    headers: authHeaders(token),
-  });
+export async function fetchChatThread(threadId: string): Promise<ChatThread> {
+  const response = await fetch(`${API_BASE_URL}/chats/${threadId}`);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch chat: ${response.status}`);
@@ -407,10 +473,10 @@ export async function fetchChatThread(threadId: string, token: string): Promise<
   return toChatThread({ ...thread, messages });
 }
 
-export async function joinEventChat(event: EventItem, token: string): Promise<ChatThread> {
+export async function joinEventChat(event: EventItem): Promise<ChatThread> {
   const response = await fetch(`${API_BASE_URL}/chats/join`, {
     method: 'POST',
-    headers: authHeaders(token),
+    headers: jsonHeaders(),
     body: JSON.stringify({ eventId: event.id }),
   });
 
@@ -435,7 +501,6 @@ export async function joinEventChat(event: EventItem, token: string): Promise<Ch
 export async function startDirectChat(
   memberName: string,
   memberUserId: string,
-  token: string,
   eventId?: string,
 ): Promise<ChatThread> {
   // retalk-api's StartDirectChatDto requires eventId (direct chats are
@@ -446,7 +511,7 @@ export async function startDirectChat(
 
   const response = await fetch(`${API_BASE_URL}/chats/direct`, {
     method: 'POST',
-    headers: authHeaders(token),
+    headers: jsonHeaders(),
     body: JSON.stringify({ member: memberName, memberUserId, eventId }),
   });
 
@@ -468,12 +533,11 @@ export async function startDirectChat(
 export async function sendChatMessage(
   chatId: string,
   text: string,
-  token: string,
   image?: string | null,
 ): Promise<ChatMessage> {
   const response = await fetch(`${API_BASE_URL}/chats/${chatId}/messages`, {
     method: 'POST',
-    headers: authHeaders(token),
+    headers: jsonHeaders(),
     body: JSON.stringify({ text, image: image ?? undefined }),
   });
 

@@ -11,7 +11,7 @@ import type { EventInterestState, EventItem } from '@/lib/types';
 
 export function shareEvent(event: EventItem) {
   void Share.share({
-    message: `Check out ${event.title} at ${event.venue} in ${event.neighborhood} — found it on ReTalk.`,
+    message: `Check out ${event.title} at ${event.venue} in ${event.neighborhood} — found it on InTouch.`,
   });
 }
 

@@ -9,7 +9,7 @@ import { palette } from '@/lib/palette';
 const sections: { title: string; body: string }[] = [
   {
     title: '1. Acceptance of terms',
-    body: 'By creating a ReTalk account or using the app, you agree to be bound by these Terms and Conditions and our Privacy Policy. If you do not agree, please do not use ReTalk.',
+    body: 'By creating a InTouch account or using the app, you agree to be bound by these Terms and Conditions and our Privacy Policy. If you do not agree, please do not use InTouch.',
   },
   {
     title: '2. Your account',
@@ -17,15 +17,15 @@ const sections: { title: string; body: string }[] = [
   },
   {
     title: '3. Events and community conduct',
-    body: 'ReTalk helps you discover and host events. Be respectful to other members, follow event hosts\' guidelines, and do not use the app to harass, spam, or endanger others.',
+    body: 'InTouch helps you discover and host events. Be respectful to other members, follow event hosts\' guidelines, and do not use the app to harass, spam, or endanger others.',
   },
   {
     title: '4. Content you share',
-    body: 'You keep ownership of the photos, messages, and event details you post, but you grant ReTalk a license to display that content within the app so other members can see it.',
+    body: 'You keep ownership of the photos, messages, and event details you post, but you grant InTouch a license to display that content within the app so other members can see it.',
   },
   {
     title: '5. Changes to these terms',
-    body: 'We may update these terms from time to time. Continued use of ReTalk after a change means you accept the updated terms.',
+    body: 'We may update these terms from time to time. Continued use of InTouch after a change means you accept the updated terms.',
   },
   {
     title: '6. Contact',
@@ -72,7 +72,7 @@ export function TermsScreen() {
         }}
       >
         <Text fontSize={13} lineHeight={19} color={palette.gray}>
-          Last updated July 2026. These terms govern your use of the ReTalk app.
+          Last updated July 2026. These terms govern your use of the InTouch app.
         </Text>
 
         <YStack gap={20}>

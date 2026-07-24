@@ -40,6 +40,7 @@ const iconMap = {
   Party: Iconsax.MagicStar,
   Play: Iconsax.Play,
   Plus: Iconsax.Add,
+  Reply: Iconsax.ArrowRotateLeft,
   Search: Iconsax.SearchNormal1,
   Send: Iconsax.Send2,
   Share: Iconsax.Share,

@@ -26,6 +26,7 @@ import { UserAvatar } from '@/components/ui/user-avatar';
 import { buildLocationMessageText } from '@/lib/location-share';
 import { palette } from '@/lib/palette';
 import { buildPollMessageText } from '@/lib/poll';
+import { buildReplyMessageText, summarizeMessageForReply } from '@/lib/reply';
 import { appTextInputStyle } from '@/lib/typography';
 import type { ChatMessage } from '@/lib/types';
 import { useChatStore } from '@/stores/chat-store';
@@ -61,6 +62,7 @@ export default function ChatConversationScreen() {
   const [isAttachmentMenuOpen, setIsAttachmentMenuOpen] = useState(false);
   const [isPollComposerOpen, setIsPollComposerOpen] = useState(false);
   const [reactionTarget, setReactionTarget] = useState<ReactionPickerTarget | null>(null);
+  const [replyTarget, setReplyTarget] = useState<ChatMessage | null>(null);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   const thread = useChatStore((state) => state.threads.find((candidate) => candidate.id === id));
@@ -110,6 +112,10 @@ export default function ChatConversationScreen() {
     [insets.top],
   );
 
+  const startReply = useCallback((message: ChatMessage) => {
+    setReplyTarget(message);
+  }, []);
+
   const likeMessage = useCallback(
     (messageId: string) => {
       const chatId = thread?.id;
@@ -152,6 +158,21 @@ export default function ChatConversationScreen() {
     );
   }
 
+  const buildOutgoingText = (text: string) => {
+    if (!replyTarget) {
+      return text;
+    }
+
+    return buildReplyMessageText(
+      {
+        author: replyTarget.author,
+        text: summarizeMessageForReply(replyTarget),
+        image: replyTarget.image ?? null,
+      },
+      text,
+    );
+  };
+
   const submit = () => {
     const text = draft.trim();
 
@@ -159,12 +180,14 @@ export default function ChatConversationScreen() {
       return;
     }
 
-    sendMessage(thread.id, text, user?.name || user?.email || 'You');
+    sendMessage(thread.id, buildOutgoingText(text), user?.name || user?.email || 'You');
     setDraft('');
+    setReplyTarget(null);
   };
 
   const sendImageMessage = (imageUri: string) => {
-    sendMessage(thread.id, '', user?.name || user?.email || 'You', imageUri);
+    sendMessage(thread.id, buildOutgoingText(''), user?.name || user?.email || 'You', imageUri);
+    setReplyTarget(null);
   };
 
   const pickImageFromLibrary = async () => {
@@ -176,6 +199,24 @@ export default function ChatConversationScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      sendImageMessage(result.assets[0].uri);
+    }
+  };
+
+  const takePicture = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert('Permission needed', 'Allow camera access to take a picture.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
       mediaTypes: ['images'],
       quality: 0.8,
     });
@@ -370,6 +411,7 @@ export default function ChatConversationScreen() {
               onLikeMessage={likeMessage}
               onToggleReaction={handleToggleReaction}
               onVotePoll={votePoll}
+              onReply={startReply}
             />
           )}
           ListEmptyComponent={
@@ -380,55 +422,94 @@ export default function ChatConversationScreen() {
         />
 
         {/* Composer */}
-        <XStack
-          alignItems="center"
-          gap={8}
-          borderTopWidth={1}
-          borderColor={palette.border}
-          backgroundColor={palette.white}
-          padding={12}
-          paddingBottom={isKeyboardVisible ? 12 : insets.bottom + 12}
-        >
-          <View
-            flex={1}
-            height={44}
-            borderRadius={999}
-            borderWidth={1}
-            borderColor={palette.border}
-            backgroundColor={palette.white}
-            paddingHorizontal={16}
-            justifyContent="center"
-          >
-            <TextInput
-              value={draft}
-              onChangeText={setDraft}
-              placeholder="Write a message"
-              placeholderTextColor={palette.muted}
-              style={[appTextInputStyle, { fontSize: 14, fontWeight: '500', color: palette.ink, paddingVertical: 0 }]}
-              onSubmitEditing={submit}
-              returnKeyType="send"
-            />
-          </View>
-          <Pressable onPress={() => setIsAttachmentMenuOpen(true)} hitSlop={6}>
-            <View width={40} height={40} alignItems="center" justifyContent="center">
-              <IconlyIcon name="Plus" size={22} color={palette.gray} />
-            </View>
-          </Pressable>
-          {draft.trim() ? (
-            <Pressable onPress={submit}>
-              <View
-                width={64}
-                height={44}
-                borderRadius={12}
-                backgroundColor={palette.primary}
-                alignItems="center"
-                justifyContent="center"
-              >
-                <IconlyIcon name="Send" size={24} color={palette.white} />
+        <YStack borderTopWidth={1} borderColor={palette.border} backgroundColor={palette.white}>
+          {replyTarget ? (
+            <XStack alignItems="center" gap={8} paddingHorizontal={12} paddingTop={10}>
+              <View width={3} height={32} borderRadius={2} backgroundColor={palette.primary} />
+              <YStack flex={1}>
+                <Text fontSize={12} fontWeight="700" color={palette.primary}>
+                  Replying to {replyTarget.fromSelf ? 'yourself' : replyTarget.author}
+                </Text>
+                <Text fontSize={12} color={palette.gray} numberOfLines={1}>
+                  {summarizeMessageForReply(replyTarget)}
+                </Text>
+              </YStack>
+              <Pressable onPress={() => setReplyTarget(null)} hitSlop={8}>
+                <View width={28} height={28} alignItems="center" justifyContent="center">
+                  <IconlyIcon name="X" size={18} color={palette.gray} />
+                </View>
+              </Pressable>
+            </XStack>
+          ) : null}
+          <XStack alignItems="center" gap={8} padding={12} paddingBottom={isKeyboardVisible ? 12 : insets.bottom + 12}>
+            <Pressable onPress={() => void takePicture()} hitSlop={6}>
+              <View width={40} height={40} alignItems="center" justifyContent="center">
+                <IconlyIcon name="Camera" size={22} color={palette.gray} />
               </View>
             </Pressable>
-          ) : null}
-        </XStack>
+            <View
+              flex={1}
+              height={44}
+              borderRadius={999}
+              borderWidth={1}
+              borderColor={palette.border}
+              backgroundColor={palette.white}
+              paddingHorizontal={16}
+              justifyContent="center"
+            >
+              <TextInput
+                value={draft}
+                onChangeText={setDraft}
+                placeholder="Write a message"
+                placeholderTextColor={palette.muted}
+                style={[appTextInputStyle, { fontSize: 14, fontWeight: '500', color: palette.ink, paddingVertical: 0 }]}
+                onSubmitEditing={submit}
+                returnKeyType="send"
+              />
+            </View>
+            <Pressable onPress={() => void pickImageFromLibrary()} hitSlop={6}>
+              <View width={40} height={40} alignItems="center" justifyContent="center">
+                <IconlyIcon name="Gallery" size={22} color={palette.gray} />
+              </View>
+            </Pressable>
+            <Pressable onPress={() => setIsGifPickerOpen(true)} hitSlop={6}>
+              <View width={40} height={40} alignItems="center" justifyContent="center">
+                <View
+                  paddingHorizontal={5}
+                  height={18}
+                  borderRadius={4}
+                  borderWidth={1.5}
+                  borderColor={palette.gray}
+                  alignItems="center"
+                  justifyContent="center"
+                >
+                  <Text fontSize={10} fontWeight="800" color={palette.gray}>
+                    GIF
+                  </Text>
+                </View>
+              </View>
+            </Pressable>
+            <Pressable onPress={() => setIsAttachmentMenuOpen(true)} hitSlop={6}>
+              <View width={40} height={40} alignItems="center" justifyContent="center">
+                <IconlyIcon name="Plus" size={22} color={palette.gray} />
+              </View>
+            </Pressable>
+            {draft.trim() ? (
+              <Pressable onPress={submit}>
+                <View
+                  width={64}
+                  height={44}
+                  borderRadius={12}
+                  backgroundColor={palette.primary}
+                  alignItems="center"
+                  justifyContent="center"
+                >
+                  <IconlyIcon name="Send" size={24} color={palette.white} />
+                </View>
+              </Pressable>
+            ) : null}
+          </XStack>
+        </YStack>
       </View>
 
       <GifPickerModal

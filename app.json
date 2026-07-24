@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "ReTalk-App",
+    "name": "InTouch",
     "slug": "intouch",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -10,9 +10,9 @@
     "newArchEnabled": true,
     "ios": {
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "ReTalk uses your location to center the event map near you.",
-        "NSPhotoLibraryUsageDescription": "ReTalk needs access to your photos so you can set a profile picture and add photos to your profile.",
-        "NSCameraUsageDescription": "ReTalk needs access to your camera so you can take a profile picture."
+        "NSLocationWhenInUseUsageDescription": "InTouch uses your location to center the event map near you.",
+        "NSPhotoLibraryUsageDescription": "InTouch needs access to your photos so you can set a profile picture and share photos in chats.",
+        "NSCameraUsageDescription": "InTouch needs access to your camera so you can take a profile picture and share photos in chats."
       },
       "supportsTablet": true
     },
@@ -32,7 +32,7 @@
         "android.permission.RECORD_AUDIO"
       ],
       "predictiveBackGestureEnabled": false,
-      "package": "com.jdecorte.ReTalkApp"
+      "package": "com.baristas.intouch"
     },
     "web": {
       "output": "static",
@@ -55,8 +55,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "ReTalk needs access to your photos so you can set a profile picture and add photos to your profile.",
-          "cameraPermission": "ReTalk needs access to your camera so you can take a profile picture."
+          "photosPermission": "InTouch needs access to your photos so you can set a profile picture and share photos in chats.",
+          "cameraPermission": "InTouch needs access to your camera so you can take a profile picture and share photos in chats."
         }
       ]
     ],

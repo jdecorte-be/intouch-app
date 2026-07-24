@@ -37,6 +37,7 @@ export const iconlyIconNames = [
   'Party',
   'Play',
   'Plus',
+  'Reply',
   'Search',
   'Send',
   'Share',

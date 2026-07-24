@@ -149,9 +149,9 @@ export default function UserProfileScreen() {
   const activitySentence = isHost
     ? `Hosting ${profile.hostedEvents.length} ${profile.hostedEvents.length === 1 ? 'event' : 'events'}${
         isAttendee ? ` and attending ${profile.attendingEvents.length} more` : ''
-      } on ReTalk.`
+      } on InTouch.`
     : isAttendee
-      ? `Attending ${profile.attendingEvents.length} ${profile.attendingEvents.length === 1 ? 'event' : 'events'} on ReTalk.`
+      ? `Attending ${profile.attendingEvents.length} ${profile.attendingEvents.length === 1 ? 'event' : 'events'} on InTouch.`
       : 'New around here — no events yet.';
 
   const bioText = [profile.roles.length > 0 ? profile.roles.join(' · ') : null, activitySentence]

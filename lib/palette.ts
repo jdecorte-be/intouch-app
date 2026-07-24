@@ -1,4 +1,4 @@
-// ReTalk brand palette, lifted from the web app's tailwind styles.
+// InTouch brand palette, lifted from the web app's tailwind styles.
 export const palette = {
   ink: '#292f36',
   inkSoft: '#3a434d',

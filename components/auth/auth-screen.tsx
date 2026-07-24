@@ -144,7 +144,7 @@ function AuthPreviewCard() {
       <YStack borderRadius={30} backgroundColor="white" padding={14} gap={16} overflow="hidden">
         <XStack alignItems="center" justifyContent="space-between" gap={12}>
           <XStack alignItems="center" gap={10} minWidth={0} flex={1}>
-            <UserAvatar label="ReTalk" size={44} />
+            <UserAvatar label="InTouch" size={44} />
             <YStack minWidth={0} flex={1}>
               <Text fontSize={11} color={palette.muted}>
                 Toronto today
@@ -431,7 +431,7 @@ function SocialAuthButton({
 function TermsNotice({ onPressTerms }: { onPressTerms: () => void }) {
   return (
     <Text fontSize={12} lineHeight={18} color={palette.gray} textAlign="center">
-      By continuing, you agree to ReTalk&apos;s{' '}
+      By continuing, you agree to InTouch&apos;s{' '}
       <Text
         fontSize={12}
         lineHeight={18}
@@ -678,11 +678,11 @@ export function AuthScreen({ initialMode = 'register' }: { initialMode?: AuthMod
                   borderColor={palette.line}
                 >
                   <Text fontSize={24} fontWeight="900" color={palette.ink}>
-                    R
+                    I
                   </Text>
                 </View>
                 <Text fontSize={18} fontWeight="800" color={palette.ink}>
-                  ReTalk
+                  InTouch
                 </Text>
               </XStack>
             </Pressable>

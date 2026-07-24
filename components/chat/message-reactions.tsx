@@ -8,17 +8,19 @@ export function MessageReactions({
   reactions,
   align,
   onToggle,
+  marginTop = 4,
 }: {
   reactions: ChatMessageReaction[];
   align: 'flex-end' | 'flex-start';
   onToggle: (emoji: string) => void;
+  marginTop?: number;
 }) {
   if (!reactions.length) {
     return null;
   }
 
   return (
-    <XStack flexWrap="wrap" gap={6} justifyContent={align} marginTop={4}>
+    <XStack flexWrap="wrap" gap={6} justifyContent={align} marginTop={marginTop}>
       {reactions.map((reaction) => (
         <Pressable key={reaction.emoji} onPress={() => onToggle(reaction.emoji)} hitSlop={4}>
           <XStack

@@ -90,7 +90,7 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      {/* ReTalk ships light-only, mirroring the web app. */}
+      {/* InTouch ships light-only, mirroring the web app. */}
       <TamaguiProvider config={tamaguiConfig} defaultTheme="light">
         <ThemeProvider value={navigationTheme}>
           <Stack

@@ -1,30 +1,47 @@
+import { LinearGradient } from 'expo-linear-gradient';
+import { Image } from 'expo-image';
 import { useEffect } from 'react';
 import { StyleSheet } from 'react-native';
 import Animated, {
+  Easing,
   runOnJS,
   useAnimatedStyle,
+  useReducedMotion,
   useSharedValue,
+  withDelay,
   withTiming,
 } from 'react-native-reanimated';
-import { Text, View, XStack, YStack } from 'tamagui';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Text, View, YStack } from 'tamagui';
 
-import { IconlyIcon } from '@/components/icons/iconly-icon';
 import { palette } from '@/lib/palette';
 
-const ENTRY_DURATION = 420;
+const LOGO_SIZE = 132;
 const HOLD_DURATION = 1150;
-const EXIT_DURATION = 320;
+const EXIT_DURATION = 300;
 
 export function AppSplashScreen({ onFinish }: { onFinish: () => void }) {
+  const reducedMotion = useReducedMotion();
+  const entryDuration = reducedMotion ? 0 : 480;
+
   const opacity = useSharedValue(1);
-  const logoScale = useSharedValue(0.94);
-  const contentY = useSharedValue(12);
+  const glowOpacity = useSharedValue(0);
+  const logoScale = useSharedValue(reducedMotion ? 1 : 0.86);
+  const logoOpacity = useSharedValue(reducedMotion ? 1 : 0);
+  const wordmarkY = useSharedValue(reducedMotion ? 0 : 10);
+  const wordmarkOpacity = useSharedValue(reducedMotion ? 1 : 0);
   const progress = useSharedValue(0);
 
   useEffect(() => {
-    logoScale.value = withTiming(1, { duration: ENTRY_DURATION });
-    contentY.value = withTiming(0, { duration: ENTRY_DURATION });
-    progress.value = withTiming(1, { duration: HOLD_DURATION + 120 });
+    glowOpacity.value = withTiming(1, { duration: entryDuration + 200, easing: Easing.out(Easing.quad) });
+    logoScale.value = withTiming(1, { duration: entryDuration, easing: Easing.out(Easing.back(1.1)) });
+    logoOpacity.value = withTiming(1, { duration: entryDuration });
+    wordmarkY.value = withDelay(entryDuration * 0.4, withTiming(0, { duration: entryDuration }));
+    wordmarkOpacity.value = withDelay(entryDuration * 0.4, withTiming(1, { duration: entryDuration }));
+    progress.value = withTiming(1, {
+      duration: HOLD_DURATION + entryDuration,
+      easing: Easing.inOut(Easing.ease),
+    });
 
     const timeout = setTimeout(() => {
       opacity.value = withTiming(0, { duration: EXIT_DURATION }, (finished) => {
@@ -32,140 +49,70 @@ export function AppSplashScreen({ onFinish }: { onFinish: () => void }) {
           runOnJS(onFinish)();
         }
       });
-    }, HOLD_DURATION);
+    }, HOLD_DURATION + entryDuration);
 
     return () => clearTimeout(timeout);
-  }, [contentY, logoScale, onFinish, opacity, progress]);
+  }, [
+    entryDuration,
+    glowOpacity,
+    logoOpacity,
+    logoScale,
+    onFinish,
+    opacity,
+    progress,
+    wordmarkOpacity,
+    wordmarkY,
+  ]);
 
-  const shellStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-  }));
-
-  const contentStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: contentY.value }],
-  }));
-
+  const shellStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  const glowStyle = useAnimatedStyle(() => ({ opacity: glowOpacity.value * 0.5 }));
   const logoStyle = useAnimatedStyle(() => ({
+    opacity: logoOpacity.value,
     transform: [{ scale: logoScale.value }],
   }));
-
-  const progressStyle = useAnimatedStyle(() => ({
-    width: `${progress.value * 100}%`,
+  const wordmarkStyle = useAnimatedStyle(() => ({
+    opacity: wordmarkOpacity.value,
+    transform: [{ translateY: wordmarkY.value }],
   }));
+  const progressStyle = useAnimatedStyle(() => ({ width: `${progress.value * 100}%` }));
+
+  const insets = useSafeAreaInsets();
 
   return (
     <Animated.View pointerEvents="auto" style={[styles.shell, shellStyle]}>
-      <Animated.View style={[styles.content, contentStyle]}>
-        <YStack alignItems="center" gap={24}>
-          <Animated.View style={logoStyle}>
-            <View
-              width={116}
-              height={116}
-              borderRadius={34}
-              backgroundColor={palette.white}
-              alignItems="center"
-              justifyContent="center"
-              borderWidth={1}
-              borderColor="rgba(41,47,54,0.08)"
-              shadowColor="#0f172a"
-              shadowOpacity={0.06}
-              shadowRadius={30}
-              shadowOffset={{ width: 0, height: 10 }}
-            >
-              <View
-                width={70}
-                height={70}
-                borderRadius={22}
-                backgroundColor={palette.ink}
-                alignItems="center"
-                justifyContent="center"
-              >
-                <Text color={palette.white} fontSize={32} fontWeight="800" letterSpacing={0}>
-                  R
-                </Text>
-              </View>
-              <View
-                position="absolute"
-                top={18}
-                right={18}
-                width={22}
-                height={22}
-                borderRadius={11}
-                backgroundColor={palette.coral}
-                borderWidth={3}
-                borderColor={palette.white}
-              />
-              <View
-                position="absolute"
-                bottom={18}
-                left={18}
-                width={22}
-                height={22}
-                borderRadius={11}
-                backgroundColor={palette.teal}
-                borderWidth={3}
-                borderColor={palette.white}
-              />
-            </View>
-          </Animated.View>
+      <Animated.View style={[styles.glow, glowStyle]} />
 
-          <YStack alignItems="center" gap={8}>
-            <Text color={palette.ink} fontSize={30} lineHeight={34} fontWeight="800" letterSpacing={0}>
-              ReTalk
+      <View style={styles.center}>
+        <Animated.View style={logoStyle}>
+          <Image
+            source={require('@/assets/images/splash-icon.png')}
+            style={styles.logo}
+            contentFit="contain"
+          />
+        </Animated.View>
+
+        <Animated.View style={wordmarkStyle}>
+          <YStack alignItems="center" gap={6} marginTop={22}>
+            <Text color={palette.ink} fontSize={26} lineHeight={30} fontWeight="800" letterSpacing={-0.3}>
+              InTouch
             </Text>
-            <Text color={palette.gray} fontSize={13} lineHeight={19} fontWeight="600" textAlign="center">
+            <Text color={palette.gray} fontSize={14} lineHeight={20} fontWeight="500" textAlign="center">
               Find events tonight and the people to go with.
             </Text>
           </YStack>
+        </Animated.View>
+      </View>
 
-          <XStack
-            alignItems="center"
-            gap={8}
-            borderRadius={999}
-            backgroundColor={palette.white}
-            paddingHorizontal={10}
-            paddingVertical={8}
-            borderWidth={1}
-            borderColor="rgba(41,47,54,0.08)"
-            shadowColor="#0f172a"
-            shadowOpacity={0.05}
-            shadowRadius={16}
-            shadowOffset={{ width: 0, height: 4 }}
-          >
-            <View
-              width={32}
-              height={32}
-              borderRadius={16}
-              backgroundColor={palette.coralSoft}
-              alignItems="center"
-              justifyContent="center"
-            >
-              <IconlyIcon name="Calendar" size={15} color={palette.ink} />
-            </View>
-            <Text color={palette.ink} fontSize={12} fontWeight="800">
-              Today
-            </Text>
-            <View width={1} height={18} backgroundColor={palette.line} />
-            <View
-              width={32}
-              height={32}
-              borderRadius={16}
-              backgroundColor={palette.tealSoft}
-              alignItems="center"
-              justifyContent="center"
-            >
-              <IconlyIcon name="Group" size={16} color={palette.ink} />
-            </View>
-            <Text color={palette.ink} fontSize={12} fontWeight="800">
-              Groups nearby
-            </Text>
-          </XStack>
-
-          <View width={104} height={4} borderRadius={999} backgroundColor="rgba(41,47,54,0.1)" overflow="hidden">
-            <Animated.View style={[styles.progress, progressStyle]} />
-          </View>
-        </YStack>
-      </Animated.View>
+      <View style={[styles.progressTrack, { marginBottom: Math.max(insets.bottom, 20) + 28 }]}>
+        <Animated.View style={[styles.progressFill, progressStyle]}>
+          <LinearGradient
+            colors={[palette.primary, palette.primaryEnd]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={StyleSheet.absoluteFill}
+          />
+        </Animated.View>
+      </View>
     </Animated.View>
   );
 }
@@ -177,15 +124,35 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: palette.white,
+  },
+  glow: {
+    position: 'absolute',
+    width: 360,
+    height: 360,
+    borderRadius: 180,
+    backgroundColor: palette.primarySoft,
+  },
+  center: {
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 32,
   },
-  content: {
-    width: '100%',
-    maxWidth: 360,
+  logo: {
+    width: LOGO_SIZE,
+    height: LOGO_SIZE,
   },
-  progress: {
+  progressTrack: {
+    position: 'absolute',
+    bottom: 0,
+    width: 72,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: palette.line,
+    overflow: 'hidden',
+  },
+  progressFill: {
     height: '100%',
     borderRadius: 999,
-    backgroundColor: palette.ink,
+    overflow: 'hidden',
   },
 });

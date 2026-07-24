@@ -77,7 +77,7 @@ export default function OnboardingScreen() {
   const isLastStep = stepIndex === steps.length - 1;
   const displayEmail = user?.email ?? '';
   const displayName = useMemo(
-    () => name.trim() || displayEmail.replace(/@.*/, '') || 'ReTalk member',
+    () => name.trim() || displayEmail.replace(/@.*/, '') || 'InTouch member',
     [displayEmail, name],
   );
 

@@ -153,7 +153,7 @@ export function MapboxEventMap({
         position: 'absolute',
         width: '100%',
       }}
-      title="ReTalk live events map"
+      title="InTouch live events map"
     />
   );
 }
