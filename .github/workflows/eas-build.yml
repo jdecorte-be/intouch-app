@@ -7,11 +7,8 @@ on:
 
 jobs:
   build:
-    name: Build ${{ matrix.platform }} app on EAS
+    name: Build android app on EAS
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        platform: [android, ios]
     steps:
       - name: Check for EXPO_TOKEN
         run: |
@@ -38,5 +35,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build ${{ matrix.platform }} app on EAS
-        run: eas build --platform ${{ matrix.platform }} --profile production --non-interactive --no-wait
+      - name: Build android app on EAS
+        run: eas build --platform android --profile production --non-interactive --no-wait
