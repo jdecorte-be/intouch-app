@@ -182,10 +182,21 @@ export async function requestPasswordReset(email: string): Promise<void> {
   }
 }
 
+export type GoogleAuthorisationUrl = {
+  url: string;
+  // Google's authorisation URL SuperTokens builds includes a PKCE
+  // code_challenge, so the code_verifier below must be sent back
+  // unchanged to /auth/signinup or Google's token exchange fails with
+  // "Missing code verifier".
+  pkceCodeVerifier?: string;
+};
+
 // Kicks off SuperTokens' thirdparty flow: asks the backend for the Google
 // authorisation URL (it holds the client id/secret) so the app never sees
 // them, then the caller opens it in a WebBrowser auth session.
-export async function getGoogleAuthorisationUrl(redirectURIOnProviderDashboard: string): Promise<string> {
+export async function getGoogleAuthorisationUrl(
+  redirectURIOnProviderDashboard: string,
+): Promise<GoogleAuthorisationUrl> {
   const response = await fetch(
     `${API_BASE_URL}/auth/authorisationurl?thirdPartyId=google&redirectURIOnProviderDashboard=${encodeURIComponent(redirectURIOnProviderDashboard)}`,
   );
@@ -196,28 +207,23 @@ export async function getGoogleAuthorisationUrl(redirectURIOnProviderDashboard: 
     throw new AuthApiError('OAuthNotConfigured');
   }
 
-  return body.urlWithQueryParams as string;
+  return {
+    url: body.urlWithQueryParams as string,
+    pkceCodeVerifier: body.pkceCodeVerifier as string | undefined,
+  };
 }
 
-// Finishes the thirdparty flow by handing the provider's callback query
-// params (code, state, ...) to SuperTokens' /signinup route.
-export async function completeGoogleSignIn(
-  redirectURIOnProviderDashboard: string,
-  redirectURIQueryParams: Record<string, string>,
-): Promise<SessionUser> {
+async function signInUpWithGoogle(body: Record<string, unknown>): Promise<SessionUser> {
   const response = await fetch(`${API_BASE_URL}/auth/signinup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      thirdPartyId: 'google',
-      redirectURIInfo: { redirectURIOnProviderDashboard, redirectURIQueryParams },
-    }),
+    body: JSON.stringify({ thirdPartyId: 'google', ...body }),
   });
 
-  const body = await response.json().catch(() => null);
+  const responseBody = await response.json().catch(() => null);
 
-  if (!response.ok || body?.status !== 'OK') {
-    throw new AuthApiError(body?.status ?? 'Unknown');
+  if (!response.ok || responseBody?.status !== 'OK') {
+    throw new AuthApiError(responseBody?.status ?? 'Unknown');
   }
 
   const user = await fetchSession();
@@ -227,6 +233,29 @@ export async function completeGoogleSignIn(
   }
 
   return user;
+}
+
+// Finishes the thirdparty flow by handing the provider's callback query
+// params (code, state, ...) to SuperTokens' /signinup route.
+export async function completeGoogleSignIn(
+  redirectURIOnProviderDashboard: string,
+  redirectURIQueryParams: Record<string, string>,
+  pkceCodeVerifier?: string,
+): Promise<SessionUser> {
+  return signInUpWithGoogle({
+    redirectURIInfo: {
+      redirectURIOnProviderDashboard,
+      redirectURIQueryParams,
+      ...(pkceCodeVerifier ? { pkceCodeVerifier } : {}),
+    },
+  });
+}
+
+// Finishes native Google Sign-In (see lib/google-signin.ts) by handing the
+// ID token straight to SuperTokens' /signinup route — no authorisation URL
+// or redirect dance needed since the token comes from the on-device SDK.
+export async function completeGoogleSignInWithIdToken(idToken: string): Promise<SessionUser> {
+  return signInUpWithGoogle({ oAuthTokens: { id_token: idToken } });
 }
 
 // Resolves the current user from the app's own session endpoint. Returns

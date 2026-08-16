@@ -1,52 +1,27 @@
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Pressable, StyleSheet } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Path } from 'react-native-svg';
 import { View, XStack } from 'tamagui';
 
 import { IconlyIcon, type IconlyIconName } from '@/components/icons/iconly-icon';
-import { palette } from '@/lib/palette';
 
 type TabConfig = { label: string; icon: IconlyIconName };
 
-const MENU_CURVE_SIZE = 35;
+const PILL_BACKGROUND = '#111114';
+const ACTIVE_ICON_COLOR = '#FFFFFF';
+const INACTIVE_ICON_COLOR = 'rgba(255,255,255,0.45)';
+const ACTIVE_PILL_COLOR = 'rgba(255,255,255,0.12)';
+const ADD_BUTTON_SIZE = 56;
 
 const tabConfig: Record<string, TabConfig> = {
   index: { label: 'Home', icon: 'Home' },
   explore: { label: 'Explore', icon: 'Compass' },
   chats: { label: 'Messages', icon: 'MessageCircleDots' },
-  // tickets: { label: 'Tickets', icon: 'Ticket' },
+  profile: { label: 'Profile', icon: 'Cog' },
 };
-
-function MenuEdgeCurve({ placement, side }: { placement: 'top' | 'bottom'; side: 'left' | 'right' }) {
-  const isLeft = side === 'left';
-  const path =
-    placement === 'top'
-      ? isLeft
-        ? `M${MENU_CURVE_SIZE} ${MENU_CURVE_SIZE} Q0 ${MENU_CURVE_SIZE} 0 0 L0 ${MENU_CURVE_SIZE}Z`
-        : `M0 ${MENU_CURVE_SIZE} Q${MENU_CURVE_SIZE} ${MENU_CURVE_SIZE} ${MENU_CURVE_SIZE} 0 L${MENU_CURVE_SIZE} ${MENU_CURVE_SIZE}Z`
-      : isLeft
-        ? `M${MENU_CURVE_SIZE} 0 Q0 0 0 ${MENU_CURVE_SIZE} L0 0Z`
-        : `M0 0 Q${MENU_CURVE_SIZE} 0 ${MENU_CURVE_SIZE} ${MENU_CURVE_SIZE} L${MENU_CURVE_SIZE} 0Z`;
-
-  return (
-    <Svg
-      width={MENU_CURVE_SIZE}
-      height={MENU_CURVE_SIZE}
-      style={[
-        styles.edgeCurve,
-        side === 'left' ? styles.edgeCurveLeft : styles.edgeCurveRight,
-        placement === 'top' ? styles.edgeCurveTop : styles.edgeCurveBottom,
-      ]}
-      pointerEvents="none"
-    >
-      <Path fill={palette.white} d={path} />
-    </Svg>
-  );
-}
 
 function NavItem({ config, isActive, onPress }: { config: TabConfig; isActive: boolean; onPress: () => void }) {
   const scale = useSharedValue(1);
@@ -70,115 +45,151 @@ function NavItem({ config, isActive, onPress }: { config: TabConfig; isActive: b
       onPress={onPress}
       style={styles.item}
     >
-      <Animated.View style={iconStyle}>
+      <Animated.View style={[styles.iconBubble, isActive && styles.iconBubbleActive, iconStyle]}>
         <IconlyIcon
           name={config.icon}
           size={22}
-          color={isActive ? palette.accent : palette.muted}
+          color={isActive ? ACTIVE_ICON_COLOR : INACTIVE_ICON_COLOR}
           weight={isActive ? 'fill' : 'regular'}
         />
       </Animated.View>
-      <Animated.Text
-        style={[styles.label, { color: isActive ? palette.accent : palette.muted }]}
-        numberOfLines={1}
-      >
-        {config.label}
-      </Animated.Text>
     </Pressable>
+  );
+}
+
+function AddButton() {
+  const router = useRouter();
+  const scale = useSharedValue(1);
+
+  const buttonStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <View style={styles.addButtonWrapper} pointerEvents="box-none">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Create"
+        hitSlop={8}
+        onPressIn={() => {
+          scale.value = withSpring(0.9, { damping: 14, stiffness: 260 });
+        }}
+        onPressOut={() => {
+          scale.value = withSpring(1, { damping: 12, stiffness: 220 });
+        }}
+        onPress={() => {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          router.push('/host');
+        }}
+      >
+        <Animated.View style={[styles.addButton, buttonStyle]}>
+          <IconlyIcon name="Plus" size={26} color="#111114" weight="bold" />
+        </Animated.View>
+      </Pressable>
+    </View>
   );
 }
 
 export function BottomNav({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
 
+  const routes = state.routes.filter((route) => tabConfig[route.name]);
+  const midpoint = Math.ceil(routes.length / 2);
+  const leftRoutes = routes.slice(0, midpoint);
+  const rightRoutes = routes.slice(midpoint);
+
+  const renderItem = (route: (typeof routes)[number]) => {
+    const config = tabConfig[route.name];
+    const routeIndex = state.routes.findIndex((r) => r.key === route.key);
+    const isActive = state.index === routeIndex;
+
+    const onPress = () => {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const event = navigation.emit({
+        type: 'tabPress',
+        target: route.key,
+        canPreventDefault: true,
+      });
+
+      if (!isActive && !event.defaultPrevented) {
+        navigation.navigate(route.name);
+      }
+    };
+
+    return <NavItem key={route.key} config={config} isActive={isActive} onPress={onPress} />;
+  };
+
   return (
-    <View position="absolute" left={0} right={0} bottom={0} pointerEvents="box-none">
-      <LinearGradient
-        pointerEvents="none"
-        colors={['rgba(17,17,20,0)', 'rgba(17,17,20,0.05)']}
-        style={styles.topShadow}
-      />
+    <View
+      position="absolute"
+      left={16}
+      right={16}
+      bottom={Math.max(insets.bottom, 12) + 8}
+      pointerEvents="box-none"
+    >
       <XStack
         alignItems="center"
         justifyContent="space-between"
-        paddingTop={10}
-        paddingHorizontal={8}
-        paddingBottom={Math.max(insets.bottom, 10)}
-        backgroundColor={palette.white}
+        paddingHorizontal={14}
+        height={64}
+        backgroundColor={PILL_BACKGROUND}
+        borderRadius={999}
         position="relative"
         overflow="visible"
-        shadowColor="#111114"
-        shadowOpacity={0.04}
-        shadowRadius={12}
-        shadowOffset={{ width: 0, height: -3 }}
-        elevation={4}
+        shadowColor="#000000"
+        shadowOpacity={0.25}
+        shadowRadius={16}
+        shadowOffset={{ width: 0, height: 8 }}
+        elevation={8}
       >
-        <MenuEdgeCurve placement="top" side="left" />
-        <MenuEdgeCurve placement="bottom" side="left" />
-        <MenuEdgeCurve placement="top" side="right" />
-        <MenuEdgeCurve placement="bottom" side="right" />
-        {state.routes.map((route, index) => {
-          const config = tabConfig[route.name];
-
-          if (!config) {
-            return null;
-          }
-
-          const isActive = state.index === index;
-
-          const onPress = () => {
-            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            const event = navigation.emit({
-              type: 'tabPress',
-              target: route.key,
-              canPreventDefault: true,
-            });
-
-            if (!isActive && !event.defaultPrevented) {
-              navigation.navigate(route.name);
-            }
-          };
-
-          return <NavItem key={route.key} config={config} isActive={isActive} onPress={onPress} />;
-        })}
+        <XStack flex={1} justifyContent="space-around">
+          {leftRoutes.map(renderItem)}
+        </XStack>
+        <View style={{ width: ADD_BUTTON_SIZE + 8 }} />
+        <XStack flex={1} justifyContent="space-around">
+          {rightRoutes.map(renderItem)}
+        </XStack>
+        <AddButton />
       </XStack>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  topShadow: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: -16,
-    height: 16,
-  },
-  edgeCurve: {
-    position: 'absolute',
-  },
-  edgeCurveLeft: {
-    left: 0,
-  },
-  edgeCurveRight: {
-    right: 0,
-  },
-  edgeCurveTop: {
-    top: -MENU_CURVE_SIZE,
-  },
-  edgeCurveBottom: {
-    bottom: -MENU_CURVE_SIZE,
-  },
   item: {
-    flex: 1,
-    minHeight: 48,
+    minWidth: 44,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
   },
-  label: {
-    fontSize: 11,
-    lineHeight: 13,
-    fontWeight: '600',
+  iconBubble: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconBubbleActive: {
+    backgroundColor: ACTIVE_PILL_COLOR,
+  },
+  addButtonWrapper: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: -(ADD_BUTTON_SIZE * 0.6),
+    alignItems: 'center',
+  },
+  addButton: {
+    width: ADD_BUTTON_SIZE,
+    height: ADD_BUTTON_SIZE,
+    borderRadius: ADD_BUTTON_SIZE / 2,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 10,
   },
 });

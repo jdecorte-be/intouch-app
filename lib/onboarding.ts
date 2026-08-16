@@ -13,39 +13,19 @@ export type OnboardingProfileChanges = Pick<
   | 'eventInterests'
 >;
 
-export function isOnboardingProfileComplete(user: SessionUser) {
-  return Boolean(
-    user.name.trim() &&
-      user.age &&
-      user.gender &&
-      user.languagesSpoken.length > 0 &&
-      user.image &&
-      user.homeNeighborhood?.trim() &&
-      user.eventInterests.length > 0,
-  );
-}
-
-export function shouldShowOnboarding(
-  user: SessionUser | null,
+// A user has finished onboarding once either the backend has stamped
+// onboardingCompletedAt (real accounts) or their id is in the local
+// completedOnboardingUserIds fallback (session-less test user, or a real
+// account that just finished onboarding in this session before the
+// server response round-tripped).
+export function hasCompletedOnboarding(
+  user: Pick<SessionUser, 'id' | 'onboardingCompletedAt'> | null,
   completedOnboardingUserIds: string[],
-) {
+): boolean {
   if (!user) {
     return false;
   }
 
-  // The database's onboardingCompletedAt is the source of truth — it's set
-  // by the backend the moment onboarding is submitted, so it survives
-  // reinstalls and devices where local storage doesn't persist (Expo Go and
-  // web fall back to in-memory storage; see lib/storage.ts). The local id
-  // list is only a fallback for the offline test-sign-in user, which has no
-  // backend record to carry the flag.
-  if (user.onboardingCompletedAt) {
-    return false;
-  }
-
-  if (completedOnboardingUserIds.includes(user.id)) {
-    return false;
-  }
-
-  return !isOnboardingProfileComplete(user);
+  return Boolean(user.onboardingCompletedAt) || completedOnboardingUserIds.includes(user.id);
 }
+

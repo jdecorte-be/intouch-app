@@ -2,14 +2,12 @@ import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import { TamaguiProvider } from 'tamagui';
 
-import { AppSplashScreen } from '@/components/ui/app-splash-screen';
 import { TestingMenu } from '@/components/ui/testing-menu';
-import { shouldShowOnboarding } from '@/lib/onboarding';
 import { palette } from '@/lib/palette';
 import { canUseNativeModules } from '@/lib/runtime';
 import { initSuperTokens } from '@/lib/supertokens';
@@ -47,14 +45,12 @@ const navigationTheme = {
 
 export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
-  const [showEntrySplash, setShowEntrySplash] = useState(true);
   const user = useSessionStore((state) => state.user);
-  const completedOnboardingUserIds = useSessionStore((state) => state.completedOnboardingUserIds);
+  const hasSeenWelcome = useSessionStore((state) => state.hasSeenWelcome);
   const loadEvents = useEventsStore((state) => state.loadEvents);
   const loadSession = useSessionStore((state) => state.loadSession);
   const loadThreads = useChatStore((state) => state.loadThreads);
   const loadNotifications = useNotificationsStore((state) => state.loadNotifications);
-  const needsOnboarding = shouldShowOnboarding(user, completedOnboardingUserIds);
 
   useEffect(() => {
     let isMounted = true;
@@ -82,10 +78,6 @@ export default function RootLayout() {
     }
   }, [isReady]);
 
-  const finishEntrySplash = useCallback(() => {
-    setShowEntrySplash(false);
-  }, []);
-
   if (!isReady) {
     return null;
   }
@@ -103,15 +95,16 @@ export default function RootLayout() {
             }}
           >
             <Stack.Protected guard={!!user}>
-              <Stack.Screen name="onboarding" />
-            </Stack.Protected>
-            <Stack.Protected guard={!!user && !needsOnboarding}>
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="event/[id]" />
               <Stack.Screen name="user/[id]" />
               <Stack.Screen name="chat/[id]" options={{ animation: 'slide_from_right' }} />
               <Stack.Screen name="host" options={{ presentation: 'modal' }} />
               <Stack.Screen name="filters" options={{ presentation: 'modal' }} />
+              <Stack.Screen name="onboarding" />
+            </Stack.Protected>
+            <Stack.Protected guard={!user && !hasSeenWelcome}>
+              <Stack.Screen name="welcome" />
             </Stack.Protected>
             <Stack.Protected guard={!user}>
               <Stack.Screen
@@ -128,7 +121,6 @@ export default function RootLayout() {
           </Stack>
           <StatusBar style="dark" />
           <TestingMenu />
-          {showEntrySplash ? <AppSplashScreen onFinish={finishEntrySplash} /> : null}
         </ThemeProvider>
       </TamaguiProvider>
     </GestureHandlerRootView>

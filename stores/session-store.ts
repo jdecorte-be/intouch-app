@@ -16,6 +16,7 @@ type SessionState = {
   // itself, so the app never sees or stores them directly.
   hasSession: boolean;
   isLoading: boolean;
+  hasSeenWelcome: boolean;
   completedOnboardingUserIds: string[];
   profileOverrides: ProfileOverrides;
   hostedEvents: EventItem[];
@@ -23,15 +24,19 @@ type SessionState = {
   interestedEvents: EventItem[];
   interestedGroups: EventItem[];
   loadSession: () => Promise<void>;
+  markWelcomeSeen: () => void;
   signIn: (email: string, password: string) => Promise<void>;
   testSignIn: () => void;
+  testStartWelcomeOnboarding: () => void;
   testSignInForOnboarding: () => void;
   register: (name: string, email: string, password: string) => Promise<void>;
   completeGoogleAuth: (
     code: string,
     state: string | null,
     redirectURIOnProviderDashboard: string,
+    pkceCodeVerifier?: string,
   ) => Promise<void>;
+  completeGoogleAuthWithIdToken: (idToken: string) => Promise<void>;
   completeOnboarding: (changes: OnboardingProfileChanges) => Promise<void>;
   updateProfile: (changes: Partial<SessionUser>) => void;
   refreshMyActivity: () => Promise<void>;
@@ -68,6 +73,7 @@ export const useSessionStore = create<SessionState>()(
       user: null,
       hasSession: false,
       isLoading: false,
+      hasSeenWelcome: false,
       completedOnboardingUserIds: [],
       profileOverrides: {},
       hostedEvents: [],
@@ -119,6 +125,8 @@ export const useSessionStore = create<SessionState>()(
         }
       },
 
+      markWelcomeSeen: () => set({ hasSeenWelcome: true }),
+
       signIn: async (email, password) => {
         const user = await api.signInWithCredentials(email, password);
         set({ hasSession: true, user: applyProfileOverrides(user, get().profileOverrides) });
@@ -137,6 +145,24 @@ export const useSessionStore = create<SessionState>()(
           interestedEvents: [],
           interestedGroups: [],
         });
+      },
+
+      testStartWelcomeOnboarding: () => {
+        const hadSession = get().hasSession;
+
+        set({
+          user: null,
+          hasSession: false,
+          hasSeenWelcome: false,
+          hostedEvents: [],
+          hostedGroups: [],
+          interestedEvents: [],
+          interestedGroups: [],
+        });
+
+        if (hadSession) {
+          void SuperTokens.signOut().catch(() => {});
+        }
       },
 
       // Debug-only helper (see the "Debug: test onboarding" button on the
@@ -176,11 +202,21 @@ export const useSessionStore = create<SessionState>()(
         void get().refreshMyActivity();
       },
 
-      completeGoogleAuth: async (code, state, redirectURIOnProviderDashboard) => {
-        const user = await api.completeGoogleSignIn(redirectURIOnProviderDashboard, {
-          code,
-          ...(state ? { state } : {}),
-        });
+      completeGoogleAuth: async (code, state, redirectURIOnProviderDashboard, pkceCodeVerifier) => {
+        const user = await api.completeGoogleSignIn(
+          redirectURIOnProviderDashboard,
+          {
+            code,
+            ...(state ? { state } : {}),
+          },
+          pkceCodeVerifier,
+        );
+        set({ hasSession: true, user: applyProfileOverrides(user, get().profileOverrides) });
+        void get().refreshMyActivity();
+      },
+
+      completeGoogleAuthWithIdToken: async (idToken) => {
+        const user = await api.completeGoogleSignInWithIdToken(idToken);
         set({ hasSession: true, user: applyProfileOverrides(user, get().profileOverrides) });
         void get().refreshMyActivity();
       },
@@ -274,6 +310,7 @@ export const useSessionStore = create<SessionState>()(
       partialize: (state) => ({
         user: state.user,
         hasSession: state.hasSession,
+        hasSeenWelcome: state.hasSeenWelcome,
         completedOnboardingUserIds: state.completedOnboardingUserIds,
         profileOverrides: state.profileOverrides,
       }),

@@ -1,4 +1,7 @@
+import { BlurView } from 'expo-blur';
+import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
@@ -13,18 +16,38 @@ import {
 } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import { Apple, Eye, EyeSlash, Facebook, Google } from 'iconsax-react-native';
 import { Text, View, XStack, YStack } from 'tamagui';
 
 import { IconlyIcon } from '@/components/icons/iconly-icon';
-import { UserAvatar } from '@/components/ui/user-avatar';
-import { AuthApiError, getGoogleAuthorisationUrl } from '@/lib/api';
-import { palette } from '@/lib/palette';
+import { API_BASE_URL, AuthApiError, getGoogleAuthorisationUrl } from '@/lib/api';
+import { GoogleSignInCancelledError, signInWithGoogleNatively } from '@/lib/google-signin';
+import { hasCompletedOnboarding } from '@/lib/onboarding';
+import { canUseNativeModules } from '@/lib/runtime';
 import { appTextInputStyle } from '@/lib/typography';
 import { useSessionStore } from '@/stores/session-store';
 
+const dark = {
+  background: '#0B0B0D',
+  surfaceElevated: '#1C1C21',
+  textPrimary: '#FFFFFF',
+  textSecondary: '#B8B8C0',
+  border: '#232328',
+  accent: '#8975fe',
+  accentEnd: '#9d8cff',
+  dangerSoft: 'rgba(239,68,68,0.12)',
+  dangerText: '#FCA5A5',
+} as const;
+
 const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
-const GOOGLE_AUTH_REDIRECT_URL = 'retalkapp://auth-callback';
+const GOOGLE_AUTH_DEEP_LINK = 'intouchapp://auth-callback';
+// Google's OAuth client only accepts https redirect URIs, so we can't ask it
+// to land straight on the app's intouchapp:// deep link. This is the backend's
+// bridge route (see retalk-api's AuthController#mobileCallback) that Google
+// is allowed to redirect to; it forwards the callback query params on to
+// GOOGLE_AUTH_DEEP_LINK via a real HTTP redirect, which openAuthSessionAsync
+// below is watching for.
+const GOOGLE_AUTH_REDIRECT_URL = `${API_BASE_URL}/auth/mobile-callback`;
 
 type AuthMode = 'login' | 'register';
 
@@ -35,19 +58,17 @@ type AuthFormValues = {
   confirmPassword: string;
 };
 
-const authModes = ['login', 'register'] as const;
-
 const authCopy = {
   login: {
-    title: 'Login to your account',
-    description: 'Enter your email below to login to your account',
+    title: 'Login Now To Your Account.',
+    description: 'Access your account to manage settings, explore events, and stay in touch.',
     submit: 'Login',
     footerText: "Don't have an account?",
-    footerLink: 'Sign up',
+    footerLink: 'Sign Up',
   },
   register: {
-    title: 'Create your account',
-    description: 'Enter your details below to start discovering events',
+    title: 'Create Your Account.',
+    description: 'Sign up to start discovering events and staying in touch with your people.',
     submit: 'Create account',
     footerText: 'Already have an account?',
     footerLink: 'Login',
@@ -78,174 +99,32 @@ function getAuthValidationError(mode: AuthMode, values: AuthFormValues) {
   return null;
 }
 
-function GoogleIcon() {
+function BackButton({ onPress }: { onPress: () => void }) {
   return (
-    <Svg viewBox="0 0 24 24" width={20} height={20}>
-      <Path
-        d="M21.8 12.2c0-.8-.1-1.5-.2-2.2H12v4.1h5.5a4.7 4.7 0 0 1-2 3.1v2.6h3.3c1.9-1.8 3-4.4 3-7.6Z"
-        fill="#4285F4"
-      />
-      <Path
-        d="M12 22c2.7 0 5-.9 6.7-2.3l-3.3-2.6c-.9.6-2 .9-3.4.9a6 6 0 0 1-5.6-4.1H3v2.7A10 10 0 0 0 12 22Z"
-        fill="#34A853"
-      />
-      <Path
-        d="M6.4 13.9A6 6 0 0 1 6 12c0-.7.1-1.3.3-1.9V7.4H3A10 10 0 0 0 2 12c0 1.6.4 3.1 1 4.5l3.4-2.6Z"
-        fill="#FBBC05"
-      />
-      <Path
-        d="M12 6c1.5 0 2.8.5 3.8 1.5l2.9-2.9A9.6 9.6 0 0 0 12 2a10 10 0 0 0-9 5.5l3.4 2.6A6 6 0 0 1 12 6Z"
-        fill="#EA4335"
-      />
-    </Svg>
+    <Pressable onPress={onPress} hitSlop={8}>
+      <View
+        width={40}
+        height={40}
+        borderRadius={20}
+        alignItems="center"
+        justifyContent="center"
+        backgroundColor={dark.surfaceElevated}
+      >
+        <IconlyIcon name="ChevronLeft" size={20} color={dark.textPrimary} />
+      </View>
+    </Pressable>
   );
 }
 
-function EventPreviewArt() {
+function AuthHeader({ onBack }: { onBack: () => void }) {
   return (
-    <Svg viewBox="0 0 420 280" width="100%" height="100%" preserveAspectRatio="xMidYMid slice">
-      <Rect width="420" height="280" fill="#dfe7ef" />
-      <Path d="M0 210 C70 160 120 230 185 180 C250 130 315 170 420 120 L420 280 L0 280 Z" fill="#b8d9d4" />
-      <Path d="M0 230 C95 188 160 246 235 200 C310 154 360 190 420 162 L420 280 L0 280 Z" fill="#f5d2c8" />
-      <Circle cx="332" cy="62" r="32" fill="#ffb7a0" />
-      <Rect x="44" y="70" width="48" height="82" rx="8" fill="#ffffff" opacity="0.86" />
-      <Rect x="112" y="42" width="64" height="112" rx="10" fill="#ffffff" opacity="0.92" />
-      <Rect x="196" y="78" width="54" height="78" rx="8" fill="#ffffff" opacity="0.8" />
-      <Rect x="262" y="38" width="70" height="120" rx="12" fill="#ffffff" opacity="0.9" />
-      <Rect x="64" y="98" width="12" height="12" rx="2" fill="#9fb7c3" />
-      <Rect x="134" y="70" width="14" height="14" rx="3" fill="#9fb7c3" />
-      <Rect x="156" y="70" width="14" height="14" rx="3" fill="#9fb7c3" />
-      <Rect x="282" y="68" width="14" height="14" rx="3" fill="#9fb7c3" />
-      <Rect x="306" y="68" width="14" height="14" rx="3" fill="#9fb7c3" />
-      <Circle cx="120" cy="184" r="18" fill="#ff6b6b" />
-      <Circle cx="120" cy="184" r="8" fill="#ffffff" />
-      <Circle cx="236" cy="148" r="18" fill="#4ecdc4" />
-      <Circle cx="236" cy="148" r="8" fill="#ffffff" />
-      <Circle cx="314" cy="190" r="18" fill="#292f36" />
-      <Circle cx="314" cy="190" r="8" fill="#ffffff" />
-      <Path d="M120 184 C158 164 190 160 236 148 C260 155 286 170 314 190" stroke="#ffffff" strokeWidth="5" strokeLinecap="round" fill="none" opacity="0.82" />
-    </Svg>
-  );
-}
-
-function AuthPreviewCard() {
-  return (
-    <YStack
-      width="100%"
-      maxWidth={430}
-      borderRadius={32}
-      backgroundColor="rgba(255,255,255,0.7)"
-      padding={14}
-      shadowColor="#0f172a"
-      shadowOpacity={0.06}
-      shadowRadius={30}
-      shadowOffset={{ width: 0, height: 10 }}
-    >
-      <YStack borderRadius={30} backgroundColor="white" padding={14} gap={16} overflow="hidden">
-        <XStack alignItems="center" justifyContent="space-between" gap={12}>
-          <XStack alignItems="center" gap={10} minWidth={0} flex={1}>
-            <UserAvatar label="InTouch" size={44} />
-            <YStack minWidth={0} flex={1}>
-              <Text fontSize={11} color={palette.muted}>
-                Toronto today
-              </Text>
-              <Text fontSize={16} fontWeight="700" color={palette.ink} numberOfLines={1}>
-                Good evening, Alex
-              </Text>
-            </YStack>
-          </XStack>
-          <View width={40} height={40} borderRadius={20} backgroundColor={palette.fog} alignItems="center" justifyContent="center">
-            <IconlyIcon name="Bell" size={20} color={palette.ink} />
-            <View
-              position="absolute"
-              top={10}
-              right={10}
-              width={8}
-              height={8}
-              borderRadius={4}
-              backgroundColor={palette.coral}
-            />
-          </View>
-        </XStack>
-
-        <XStack backgroundColor={palette.fog} borderRadius={24} padding={8} gap={8}>
-          {[
-            ['Today', '11'],
-            ['Fri', '12'],
-            ['Sat', '13'],
-            ['Sun', '14'],
-          ].map(([day, date], index) => (
-            <YStack
-              key={day}
-              flex={1}
-              height={64}
-              alignItems="center"
-              justifyContent="center"
-              borderRadius={999}
-              backgroundColor="white"
-              gap={4}
-            >
-              <Text fontSize={12} color={palette.gray}>
-                {day}
-              </Text>
-              <View
-                width={30}
-                height={30}
-                borderRadius={15}
-                alignItems="center"
-                justifyContent="center"
-                backgroundColor={index === 0 ? palette.ink : 'transparent'}
-              >
-                <Text fontSize={13} fontWeight="800" color={index === 0 ? 'white' : palette.ink}>
-                  {date}
-                </Text>
-              </View>
-            </YStack>
-          ))}
-        </XStack>
-
-        <YStack borderRadius={24} backgroundColor="white" padding={12} gap={12} shadowColor="#0f172a" shadowOpacity={0.06} shadowRadius={30} shadowOffset={{ width: 0, height: 10 }}>
-          <View height={190} borderRadius={20} overflow="hidden" backgroundColor={palette.mist}>
-            <EventPreviewArt />
-            <View position="absolute" top={12} right={12} width={34} height={34} borderRadius={17} backgroundColor="rgba(255,255,255,0.95)" alignItems="center" justifyContent="center">
-              <IconlyIcon name="Share" size={17} color={palette.ink} />
-            </View>
-          </View>
-          <XStack gap={8}>
-            <View borderRadius={999} backgroundColor={palette.coralSoft} paddingHorizontal={10} paddingVertical={5}>
-              <Text fontSize={11} fontWeight="800" color={palette.ink}>
-                Pick of the day
-              </Text>
-            </View>
-            <View borderRadius={999} backgroundColor={palette.tealSoft} paddingHorizontal={10} paddingVertical={5}>
-              <Text fontSize={11} fontWeight="800" color={palette.ink}>
-                30+ going
-              </Text>
-            </View>
-          </XStack>
-          <Text fontSize={18} fontWeight="800" color={palette.ink} numberOfLines={1}>
-            Rooftop Vinyl Social
-          </Text>
-          <XStack gap={14}>
-            <XStack alignItems="center" gap={5}>
-              <IconlyIcon name="Calendar" size={14} color={palette.gray} />
-              <Text fontSize={12} fontWeight="600" color={palette.gray}>
-                Tonight
-              </Text>
-            </XStack>
-            <XStack alignItems="center" gap={5}>
-              <IconlyIcon name="Location" size={14} color={palette.gray} />
-              <Text fontSize={12} fontWeight="600" color={palette.gray}>
-                Queen West
-              </Text>
-            </XStack>
-          </XStack>
-          <Text fontSize={13} lineHeight={19} color={palette.gray} numberOfLines={2}>
-            A warm evening set with local selectors, skyline views, and room to bring friends.
-          </Text>
-        </YStack>
-      </YStack>
-    </YStack>
+    <XStack alignItems="center" justifyContent="space-between">
+      <BackButton onPress={onBack} />
+      <Text fontSize={17} fontWeight="800" color={dark.textPrimary}>
+        InTouch
+      </Text>
+      <View width={40} height={40} />
+    </XStack>
   );
 }
 
@@ -257,6 +136,7 @@ function AuthInput({
   secureTextEntry,
   autoComplete,
   keyboardType,
+  rightAdornment,
 }: {
   label: string;
   value: string;
@@ -265,63 +145,65 @@ function AuthInput({
   secureTextEntry?: boolean;
   autoComplete?: 'email' | 'name' | 'password' | 'current-password' | 'new-password';
   keyboardType?: 'default' | 'email-address';
+  rightAdornment?: ReactNode;
 }) {
   return (
     <YStack gap={8}>
-      <Text fontSize={14} fontWeight="700" color={palette.ink}>
+      <Text fontSize={13} fontWeight="600" color={dark.textSecondary}>
         {label}
       </Text>
-      <TextInput
-        value={value}
-        onChangeText={onChangeText}
-        placeholder={placeholder}
-        placeholderTextColor={palette.muted}
-        secureTextEntry={secureTextEntry}
-        autoCapitalize={keyboardType === 'email-address' ? 'none' : 'words'}
-        autoComplete={autoComplete}
-        keyboardType={keyboardType}
-        style={styles.input}
-      />
+      <View justifyContent="center">
+        <TextInput
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor={dark.textSecondary}
+          secureTextEntry={secureTextEntry}
+          autoCapitalize={keyboardType === 'email-address' ? 'none' : 'words'}
+          autoComplete={autoComplete}
+          keyboardType={keyboardType}
+          style={[styles.input, rightAdornment ? { paddingRight: 48 } : null]}
+        />
+        {rightAdornment ? (
+          <View position="absolute" right={16} top={0} bottom={0} justifyContent="center">
+            {rightAdornment}
+          </View>
+        ) : null}
+      </View>
     </YStack>
   );
 }
 
-function AuthModeTabs({
-  mode,
-  onChange,
+function PasswordInput({
+  label,
+  value,
+  onChangeText,
+  autoComplete,
 }: {
-  mode: AuthMode;
-  onChange: (mode: AuthMode) => void;
+  label: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  autoComplete: 'password' | 'current-password' | 'new-password';
 }) {
+  const [isVisible, setIsVisible] = useState(false);
+
   return (
-    <XStack backgroundColor={palette.fog} borderRadius={999} padding={4}>
-      {authModes.map((item) => {
-        const isActive = item === mode;
-        return (
-          <Pressable
-            key={item}
-            onPress={() => onChange(item)}
-            style={styles.segmentButton}
-          >
-            <View
-              height={38}
-              alignItems="center"
-              justifyContent="center"
-              borderRadius={999}
-              backgroundColor={isActive ? 'white' : 'transparent'}
-              shadowColor="#0f172a"
-              shadowOpacity={isActive ? 0.05 : 0}
-              shadowRadius={12}
-              shadowOffset={{ width: 0, height: 4 }}
-            >
-              <Text fontSize={13} fontWeight="800" color={isActive ? palette.ink : palette.gray}>
-                {item === 'login' ? 'Login' : 'Register'}
-              </Text>
-            </View>
-          </Pressable>
-        );
-      })}
-    </XStack>
+    <AuthInput
+      label={label}
+      value={value}
+      onChangeText={onChangeText}
+      secureTextEntry={!isVisible}
+      autoComplete={autoComplete}
+      rightAdornment={
+        <Pressable onPress={() => setIsVisible((current) => !current)} hitSlop={10}>
+          {isVisible ? (
+            <Eye color={dark.textSecondary} size={20} />
+          ) : (
+            <EyeSlash color={dark.textSecondary} size={20} />
+          )}
+        </Pressable>
+      }
+    />
   );
 }
 
@@ -331,8 +213,8 @@ function AuthErrorMessage({ message }: { message: string | null }) {
   }
 
   return (
-    <View borderRadius={8} borderWidth={1} borderColor="rgba(255,107,107,0.35)" backgroundColor={palette.dangerSoft} padding={12}>
-      <Text fontSize={13} fontWeight="700" color={palette.dangerText}>
+    <View borderRadius={12} backgroundColor={dark.dangerSoft} padding={12}>
+      <Text fontSize={13} fontWeight="600" color={dark.dangerText}>
         {message}
       </Text>
     </View>
@@ -355,19 +237,14 @@ function AuthSubmitButton({
   onPressOut: () => void;
 }) {
   return (
-    <Pressable
-      onPress={onPress}
-      onPressIn={onPressIn}
-      onPressOut={onPressOut}
-      disabled={isSubmitting}
-    >
+    <Pressable onPress={onPress} onPressIn={onPressIn} onPressOut={onPressOut} disabled={isSubmitting}>
       <AnimatedLinearGradient
-        colors={palette.primaryGradient}
+        colors={[dark.accent, dark.accentEnd]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[styles.submitButton, animatedStyle]}
       >
-        <Text color="white" fontSize={14} fontWeight="800">
+        <Text color="white" fontSize={15} fontWeight="800">
           {isSubmitting ? 'Please wait...' : label}
         </Text>
       </AnimatedLinearGradient>
@@ -375,14 +252,53 @@ function AuthSubmitButton({
   );
 }
 
+function RememberAndForgotRow({
+  rememberMe,
+  onToggleRemember,
+  onForgotPassword,
+}: {
+  rememberMe: boolean;
+  onToggleRemember: () => void;
+  onForgotPassword: () => void;
+}) {
+  return (
+    <XStack alignItems="center" justifyContent="space-between">
+      <Pressable onPress={onToggleRemember} hitSlop={8}>
+        <XStack alignItems="center" gap={8}>
+          <View
+            width={18}
+            height={18}
+            borderRadius={9}
+            borderWidth={1.5}
+            borderColor={rememberMe ? dark.accent : dark.border}
+            backgroundColor={rememberMe ? dark.accent : 'transparent'}
+            alignItems="center"
+            justifyContent="center"
+          >
+            {rememberMe ? <View width={7} height={7} borderRadius={4} backgroundColor="white" /> : null}
+          </View>
+          <Text fontSize={13} fontWeight="600" color={dark.textSecondary}>
+            Remember me
+          </Text>
+        </XStack>
+      </Pressable>
+      <Pressable onPress={onForgotPassword} hitSlop={8}>
+        <Text fontSize={13} fontWeight="700" color={dark.accentEnd}>
+          Forgot password?
+        </Text>
+      </Pressable>
+    </XStack>
+  );
+}
+
 function AuthDivider() {
   return (
-    <XStack alignItems="center" gap={10}>
-      <View flex={1} height={1} backgroundColor="#dce5e2" />
-      <Text fontSize={13} color={palette.gray}>
-        Or continue with
+    <XStack alignItems="center" gap={12}>
+      <View flex={1} height={1} backgroundColor={dark.border} />
+      <Text fontSize={12} fontWeight="700" color={dark.textSecondary}>
+        OR
       </Text>
-      <View flex={1} height={1} backgroundColor="#dce5e2" />
+      <View flex={1} height={1} backgroundColor={dark.border} />
     </XStack>
   );
 }
@@ -391,58 +307,36 @@ function SocialAuthButton({
   icon,
   label,
   disabled,
-  variant = 'outline',
   onPress,
+  translucent,
 }: {
   icon: ReactNode;
   label: string;
   disabled: boolean;
-  variant?: 'outline' | 'soft';
   onPress: () => void;
+  translucent?: boolean;
 }) {
-  const isSoft = variant === 'soft';
-
   return (
     <Pressable onPress={onPress} disabled={disabled}>
       <XStack
-        height={44}
+        height={52}
         alignItems="center"
         justifyContent="center"
         gap={10}
         borderRadius={999}
-        borderWidth={1}
-        borderColor={isSoft ? 'rgba(41,47,54,0.12)' : '#e6e8ec'}
-        backgroundColor={isSoft ? palette.fog : 'white'}
-        opacity={disabled ? 0.7 : 1}
-        shadowColor="#0f172a"
-        shadowOpacity={isSoft ? 0 : 0.05}
-        shadowRadius={16}
-        shadowOffset={{ width: 0, height: 4 }}
+        overflow="hidden"
+        backgroundColor={translucent ? 'rgba(255,255,255,0.14)' : dark.surfaceElevated}
+        opacity={disabled ? 0.6 : 1}
       >
+        {translucent ? (
+          <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFillObject} />
+        ) : null}
         {icon}
-        <Text fontSize={14} fontWeight="800" color={palette.ink}>
+        <Text fontSize={14} fontWeight="700" color={dark.textPrimary}>
           {label}
         </Text>
       </XStack>
     </Pressable>
-  );
-}
-
-function TermsNotice({ onPressTerms }: { onPressTerms: () => void }) {
-  return (
-    <Text fontSize={12} lineHeight={18} color={palette.gray} textAlign="center">
-      By continuing, you agree to InTouch&apos;s{' '}
-      <Text
-        fontSize={12}
-        lineHeight={18}
-        fontWeight="700"
-        color={palette.primary}
-        onPress={onPressTerms}
-      >
-        Terms and Conditions
-      </Text>
-      .
-    </Text>
   );
 }
 
@@ -457,15 +351,112 @@ function AuthFooterLink({
 }) {
   return (
     <XStack justifyContent="center" gap={4}>
-      <Text fontSize={14} color={palette.gray}>
+      <Text fontSize={14} color={dark.textSecondary}>
         {copy.footerText}
       </Text>
-      <Pressable onPress={() => onModeChange(isRegister ? 'login' : 'register')}>
-        <Text fontSize={14} fontWeight="800" color={palette.ink}>
+      <Pressable onPress={() => onModeChange(isRegister ? 'login' : 'register')} hitSlop={6}>
+        <Text fontSize={14} fontWeight="800" color={dark.accentEnd}>
           {copy.footerLink}
         </Text>
       </Pressable>
     </XStack>
+  );
+}
+
+const AUTH_HERO_IMAGE =
+  'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=1200&q=75';
+
+function AuthLandingGate({
+  error,
+  isSubmitting,
+  onContinueWithEmail,
+  onGoogle,
+  onFacebook,
+  onApple,
+  onOpenTerms,
+  insetsBottom,
+}: {
+  error: string | null;
+  isSubmitting: boolean;
+  onContinueWithEmail: () => void;
+  onGoogle: () => void;
+  onFacebook: () => void;
+  onApple: () => void;
+  onOpenTerms: () => void;
+  insetsBottom: number;
+}) {
+  return (
+    <View style={styles.root}>
+      <StatusBar style="light" />
+      <Image source={AUTH_HERO_IMAGE} style={StyleSheet.absoluteFillObject} contentFit="cover" />
+      <LinearGradient
+        colors={['rgba(11,11,13,0.1)', 'rgba(11,11,13,0.72)', 'rgba(11,11,13,0.98)']}
+        locations={[0, 0.5, 1]}
+        style={StyleSheet.absoluteFillObject}
+      />
+
+      <YStack position="absolute" left={24} right={24} top={0} bottom={insetsBottom + 28}>
+        <YStack flex={1} justifyContent="center" gap={20}>
+          <YStack gap={6} alignItems="center">
+            <Text fontSize={19} fontWeight="800" color={dark.textPrimary} textAlign="center">
+              Let&apos;s get started
+            </Text>
+            <Text fontSize={13} lineHeight={19} color="rgba(255,255,255,0.7)" textAlign="center">
+              Sign up or log in to see what&apos;s happening near you
+            </Text>
+          </YStack>
+
+          <AuthErrorMessage message={error} />
+
+          <YStack gap={12}>
+            <Pressable onPress={onContinueWithEmail} disabled={isSubmitting}>
+              <LinearGradient
+                colors={[dark.accent, dark.accentEnd]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.submitButton, { opacity: isSubmitting ? 0.7 : 1 }]}
+              >
+                <Text color="white" fontSize={15} fontWeight="800">
+                  Continue With Email
+                </Text>
+              </LinearGradient>
+            </Pressable>
+            <SocialAuthButton
+              icon={<Apple color={dark.textPrimary} size={20} variant="Bold" />}
+              label="Continue With Apple"
+              disabled={isSubmitting}
+              onPress={onApple}
+              translucent
+            />
+            <SocialAuthButton
+              icon={<Facebook color={dark.textPrimary} size={20} variant="Bold" />}
+              label="Continue With Facebook"
+              disabled={isSubmitting}
+              onPress={onFacebook}
+              translucent
+            />
+            <SocialAuthButton
+              icon={<Google color={dark.textPrimary} size={20} variant="Bold" />}
+              label="Continue With Google"
+              disabled={isSubmitting}
+              onPress={onGoogle}
+              translucent
+            />
+          </YStack>
+        </YStack>
+
+        <Text fontSize={11} lineHeight={16} color="rgba(255,255,255,0.5)" textAlign="center">
+          By signing up or logging in, I accept the InTouch{' '}
+          <Text fontSize={11} fontWeight="700" color={dark.accentEnd} onPress={onOpenTerms}>
+            Terms of Service
+          </Text>{' '}
+          and{' '}
+          <Text fontSize={11} fontWeight="700" color={dark.accentEnd} onPress={onOpenTerms}>
+            Privacy Policy
+          </Text>
+        </Text>
+      </YStack>
+    </View>
   );
 }
 
@@ -475,16 +466,18 @@ export function AuthScreen({ initialMode = 'register' }: { initialMode?: AuthMod
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const requestedMode = getRequestedAuthMode(params.mode, initialMode);
+  const cameWithExplicitMode = params.mode === 'login' || params.mode === 'register';
   const signIn = useSessionStore((state) => state.signIn);
-  const testSignIn = useSessionStore((state) => state.testSignIn);
-  const testSignInForOnboarding = useSessionStore((state) => state.testSignInForOnboarding);
   const register = useSessionStore((state) => state.register);
   const completeGoogleAuth = useSessionStore((state) => state.completeGoogleAuth);
+  const completeGoogleAuthWithIdToken = useSessionStore((state) => state.completeGoogleAuthWithIdToken);
+  const [stage, setStage] = useState<'landing' | 'form'>(cameWithExplicitMode ? 'form' : 'landing');
   const [mode, setMode] = useState<AuthMode>(requestedMode);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const lastRequestedMode = useRef<AuthMode>(requestedMode);
@@ -492,8 +485,6 @@ export function AuthScreen({ initialMode = 'register' }: { initialMode?: AuthMod
   const copy = authCopy[mode];
   const isWide = width >= 840;
   const isRegister = mode === 'register';
-  const isLogin = mode === 'login';
-  const showPreview = isWide && !isLogin;
 
   const submitOpacity = useSharedValue(1);
   const formOpacity = useSharedValue(1);
@@ -521,6 +512,14 @@ export function AuthScreen({ initialMode = 'register' }: { initialMode?: AuthMod
 
   function describeError(err: unknown, fallback: string) {
     return err instanceof AuthApiError ? err.message : fallback;
+  }
+
+  // Every sign-in path (email/password, Google native, Google browser)
+  // funnels through here so onboarding is never skippable regardless of
+  // how the user authenticated.
+  function navigateAfterAuth() {
+    const { user, completedOnboardingUserIds } = useSessionStore.getState();
+    router.replace(hasCompletedOnboarding(user, completedOnboardingUserIds) ? '/explore' : '/onboarding');
   }
 
   const handleModeChange = (nextMode: AuthMode) => {
@@ -566,7 +565,7 @@ export function AuthScreen({ initialMode = 'register' }: { initialMode?: AuthMod
         await signIn(email.trim(), password);
       }
 
-      router.replace(isRegister ? '/profile' : '/explore');
+      navigateAfterAuth();
     } catch (err) {
       setError(describeError(err, 'Something went wrong. Please try again.'));
     } finally {
@@ -583,12 +582,30 @@ export function AuthScreen({ initialMode = 'register' }: { initialMode?: AuthMod
     setIsSubmitting(true);
 
     try {
+      // Android gets Google's own native sign-in sheet (no in-app browser)
+      // when running in a dev/standalone build; Expo Go can't load the
+      // native module, so it falls back to the browser flow below like iOS.
+      if (Platform.OS === 'android' && canUseNativeModules) {
+        try {
+          const idToken = await signInWithGoogleNatively();
+          await completeGoogleAuthWithIdToken(idToken);
+          navigateAfterAuth();
+        } catch (err) {
+          if (!(err instanceof GoogleSignInCancelledError)) {
+            throw err;
+          }
+        }
+
+        return;
+      }
+
       // SuperTokens' thirdparty flow: ask the backend for Google's
       // authorisation URL (it owns the client id/secret), send the user
       // through it, then hand the callback's code/state back to the
       // backend's /signinup route to finish the sign-in.
-      const authorisationUrl = await getGoogleAuthorisationUrl(GOOGLE_AUTH_REDIRECT_URL);
-      const result = await WebBrowser.openAuthSessionAsync(authorisationUrl, GOOGLE_AUTH_REDIRECT_URL);
+      const { url: authorisationUrl, pkceCodeVerifier } =
+        await getGoogleAuthorisationUrl(GOOGLE_AUTH_REDIRECT_URL);
+      const result = await WebBrowser.openAuthSessionAsync(authorisationUrl, GOOGLE_AUTH_DEEP_LINK);
 
       if (result.type !== 'success' || !result.url) {
         return;
@@ -607,8 +624,8 @@ export function AuthScreen({ initialMode = 'register' }: { initialMode?: AuthMod
         throw new AuthApiError('NoSession');
       }
 
-      await completeGoogleAuth(code, searchParams.get('state'), GOOGLE_AUTH_REDIRECT_URL);
-      router.replace('/explore');
+      await completeGoogleAuth(code, searchParams.get('state'), GOOGLE_AUTH_REDIRECT_URL, pkceCodeVerifier);
+      navigateAfterAuth();
     } catch (err) {
       setError(describeError(err, 'Google sign-in failed. Please try again.'));
     } finally {
@@ -616,222 +633,169 @@ export function AuthScreen({ initialMode = 'register' }: { initialMode?: AuthMod
     }
   };
 
-  const handleTestSignIn = () => {
+  const handleAppleSignIn = () => {
     if (isSubmitting) {
       return;
     }
 
-    setError(null);
-    testSignIn();
-    router.replace('/explore');
+    setError('Apple sign-in is coming soon.');
   };
 
-  const handleTestOnboarding = () => {
+  const handleFacebookSignIn = () => {
     if (isSubmitting) {
       return;
     }
 
-    setError(null);
-    testSignInForOnboarding();
-    router.replace('/onboarding');
+    setError('Facebook sign-in is coming soon.');
   };
+
+  const handleContinueWithEmail = () => {
+    setError(null);
+    setStage('form');
+  };
+
+  const handleBack = () => {
+    if (stage === 'form' && !cameWithExplicitMode) {
+      setError(null);
+      setStage('landing');
+      return;
+    }
+
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+
+    router.replace('/welcome');
+  };
+
+  if (stage === 'landing') {
+    return (
+      <AuthLandingGate
+        error={error}
+        isSubmitting={isSubmitting}
+        onContinueWithEmail={handleContinueWithEmail}
+        onGoogle={handleGoogleSignIn}
+        onFacebook={handleFacebookSignIn}
+        onApple={handleAppleSignIn}
+        onOpenTerms={() => router.push('/terms')}
+        insetsBottom={insets.bottom}
+      />
+    );
+  }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.scrollContent,
-          {
-            paddingTop: insets.top + 24,
-            paddingBottom: insets.bottom + 28,
-            paddingHorizontal: isWide ? 40 : 20,
-          },
-        ]}
-      >
-        <XStack
-          width="100%"
-          maxWidth={showPreview ? 1120 : 420}
-          alignSelf="center"
-          alignItems="center"
-          justifyContent="center"
-          gap={showPreview ? 42 : 26}
-          flexDirection={showPreview ? 'row' : 'column'}
+    <View style={styles.root}>
+      <StatusBar style="light" />
+      <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingTop: insets.top + 8,
+              paddingBottom: insets.bottom + 28,
+              paddingHorizontal: isWide ? 40 : 20,
+            },
+          ]}
         >
-          <YStack
-            width="100%"
-            flex={showPreview ? 1 : undefined}
-            minHeight={showPreview ? 680 : undefined}
-            justifyContent={showPreview ? 'space-between' : 'center'}
-            alignItems="center"
-            gap={26}
-          >
-            <Pressable onPress={() => router.replace('/')}>
-              <XStack alignItems="center" gap={10} alignSelf={showPreview ? 'flex-start' : 'center'}>
-                <View
-                  width={56}
-                  height={56}
-                  borderRadius={16}
-                  backgroundColor="white"
-                  alignItems="center"
-                  justifyContent="center"
-                  borderWidth={1}
-                  borderColor={palette.line}
-                >
-                  <Text fontSize={24} fontWeight="900" color={palette.ink}>
-                    I
+          <YStack width="100%" maxWidth={420} alignSelf="center" gap={28}>
+            <AuthHeader onBack={handleBack} />
+
+            <Animated.View style={[styles.formTransition, formAnimatedStyle]}>
+              <YStack gap={22}>
+                <YStack gap={6}>
+                  <Text fontSize={26} lineHeight={32} fontWeight="800" color={dark.textPrimary}>
+                    {copy.title}
                   </Text>
-                </View>
-                <Text fontSize={18} fontWeight="800" color={palette.ink}>
-                  InTouch
-                </Text>
-              </XStack>
-            </Pressable>
-
-            <YStack width="100%" maxWidth={360} alignSelf="center" gap={24}>
-              <AuthModeTabs mode={mode} onChange={handleModeChange} />
-
-              <Animated.View style={[styles.formTransition, formAnimatedStyle]}>
-                <YStack gap={20}>
-                  <YStack alignItems="center" gap={6}>
-                    <Text fontSize={24} lineHeight={30} fontWeight="800" color={palette.ink} textAlign="center">
-                      {copy.title}
-                    </Text>
-                    <Text fontSize={14} lineHeight={20} color={palette.gray} textAlign="center">
-                      {copy.description}
-                    </Text>
-                  </YStack>
-
-                  <AuthErrorMessage message={error} />
-
-                  {isRegister ? (
-                    <AuthInput
-                      label="Name"
-                      value={name}
-                      onChangeText={setName}
-                      autoComplete="name"
-                    />
-                  ) : null}
-                  <AuthInput
-                    label="Email"
-                    value={email}
-                    onChangeText={setEmail}
-                    placeholder="m@example.com"
-                    autoComplete="email"
-                    keyboardType="email-address"
-                  />
-                  <YStack gap={8}>
-                    <XStack alignItems="center">
-                      <Text flex={1} fontSize={14} fontWeight="700" color={palette.ink}>
-                        Password
-                      </Text>
-                      {!isRegister ? (
-                        <Pressable onPress={() => router.push('/forgot-password')}>
-                          <Text fontSize={13} fontWeight="700" color={palette.primary}>
-                            Forgot your password?
-                          </Text>
-                        </Pressable>
-                      ) : null}
-                    </XStack>
-                    <TextInput
-                      value={password}
-                      onChangeText={setPassword}
-                      secureTextEntry
-                      autoComplete={isRegister ? 'new-password' : 'current-password'}
-                      style={styles.input}
-                    />
-                  </YStack>
-                  {isRegister ? (
-                    <AuthInput
-                      label="Confirm password"
-                      value={confirmPassword}
-                      onChangeText={setConfirmPassword}
-                      secureTextEntry
-                      autoComplete="new-password"
-                    />
-                  ) : null}
-
-                  <YStack gap={10}>
-                    <AuthSubmitButton
-                      label={copy.submit}
-                      isSubmitting={isSubmitting}
-                      animatedStyle={submitAnimatedStyle}
-                      onPress={handleSubmit}
-                      onPressIn={() => {
-                        submitOpacity.value = withTiming(0.6, { duration: 120 });
-                      }}
-                      onPressOut={() => {
-                        submitOpacity.value = withTiming(isSubmitting ? 0.7 : 1, { duration: 150 });
-                      }}
-                    />
-                    <TermsNotice onPressTerms={() => router.push('/terms')} />
-                  </YStack>
-
-                  <AuthDivider />
-
-                  <YStack gap={14}>
-                    <SocialAuthButton
-                      icon={<GoogleIcon />}
-                      label="Continue with Google"
-                      disabled={isSubmitting}
-                      onPress={handleGoogleSignIn}
-                    />
-
-                    {!isRegister ? (
-                      <SocialAuthButton
-                        icon={<IconlyIcon name="UserPlus" size={18} color={palette.ink} />}
-                        label="Continue as test user"
-                        disabled={isSubmitting}
-                        variant="soft"
-                        onPress={handleTestSignIn}
-                      />
-                    ) : null}
-
-                    {!isRegister && __DEV__ ? (
-                      <SocialAuthButton
-                        icon={<IconlyIcon name="Cog" size={18} color={palette.ink} />}
-                        label="Debug: test onboarding"
-                        disabled={isSubmitting}
-                        variant="soft"
-                        onPress={handleTestOnboarding}
-                      />
-                    ) : null}
-
-                    <AuthFooterLink copy={copy} isRegister={isRegister} onModeChange={handleModeChange} />
-                  </YStack>
+                  <Text fontSize={14} lineHeight={20} color={dark.textSecondary}>
+                    {copy.description}
+                  </Text>
                 </YStack>
-              </Animated.View>
-            </YStack>
 
-            <Text
-              fontSize={12}
-              lineHeight={18}
-              color={palette.gray}
-              maxWidth={320}
-              textAlign="center"
-              display={isWide ? 'flex' : 'none'}
-            >
-              Find curated events, communities, and plans nearby.
-            </Text>
+                <AuthErrorMessage message={error} />
+
+                {isRegister ? (
+                  <AuthInput label="Name" value={name} onChangeText={setName} autoComplete="name" />
+                ) : null}
+                <AuthInput
+                  label="Email"
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="jamesschleifer@gmail.com"
+                  autoComplete="email"
+                  keyboardType="email-address"
+                />
+                <PasswordInput
+                  label="Password"
+                  value={password}
+                  onChangeText={setPassword}
+                  autoComplete={isRegister ? 'new-password' : 'current-password'}
+                />
+                {isRegister ? (
+                  <PasswordInput
+                    label="Confirm password"
+                    value={confirmPassword}
+                    onChangeText={setConfirmPassword}
+                    autoComplete="new-password"
+                  />
+                ) : null}
+
+                <YStack gap={16}>
+                  <AuthSubmitButton
+                    label={copy.submit}
+                    isSubmitting={isSubmitting}
+                    animatedStyle={submitAnimatedStyle}
+                    onPress={handleSubmit}
+                    onPressIn={() => {
+                      submitOpacity.value = withTiming(0.6, { duration: 120 });
+                    }}
+                    onPressOut={() => {
+                      submitOpacity.value = withTiming(isSubmitting ? 0.7 : 1, { duration: 150 });
+                    }}
+                  />
+
+                  {!isRegister ? (
+                    <RememberAndForgotRow
+                      rememberMe={rememberMe}
+                      onToggleRemember={() => setRememberMe((current) => !current)}
+                      onForgotPassword={() => router.push('/forgot-password')}
+                    />
+                  ) : null}
+                </YStack>
+
+                <AuthDivider />
+
+                <YStack gap={12}>
+                  <SocialAuthButton
+                    icon={<Google color={dark.textPrimary} size={20} variant="Bold" />}
+                    label="Sign in with Google"
+                    disabled={isSubmitting}
+                    onPress={handleGoogleSignIn}
+                  />
+                  <SocialAuthButton
+                    icon={<Apple color={dark.textPrimary} size={20} variant="Bold" />}
+                    label="Continue with Apple"
+                    disabled={isSubmitting}
+                    onPress={handleAppleSignIn}
+                  />
+                </YStack>
+
+                <AuthFooterLink copy={copy} isRegister={isRegister} onModeChange={handleModeChange} />
+              </YStack>
+            </Animated.View>
           </YStack>
-
-          <View flex={showPreview ? 1 : undefined} alignItems="center" display={showPreview ? 'flex' : 'none'}>
-            <AuthPreviewCard />
-          </View>
-        </XStack>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: palette.white,
+    backgroundColor: dark.background,
   },
   scrollContent: {
     flexGrow: 1,
@@ -839,26 +803,20 @@ const styles = StyleSheet.create({
   },
   input: {
     ...appTextInputStyle,
-    height: 40,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#cfd8d5',
-    backgroundColor: palette.white,
-    color: palette.ink,
-    fontSize: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: dark.surfaceElevated,
+    color: dark.textPrimary,
+    fontSize: 15,
+    paddingHorizontal: 16,
   },
   submitButton: {
-    height: 44,
-    borderRadius: 8,
+    height: 52,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
   },
   formTransition: {
     width: '100%',
-  },
-  segmentButton: {
-    flex: 1,
   },
 });

@@ -1,5 +1,7 @@
+import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
@@ -16,8 +18,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, View, XStack, YStack } from 'tamagui';
 
-import { IconlyIcon, type IconlyIconName } from '@/components/icons/iconly-icon';
-import { SectionLabel } from '@/components/ui/section-label';
+import { IconlyIcon } from '@/components/icons/iconly-icon';
+import { CompactCategoryGrid } from '@/components/onboarding/compact-category-grid';
+import { SlideToConfirm } from '@/components/ui/slide-to-confirm';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import {
   genderOptions,
@@ -25,25 +28,69 @@ import {
   languageOptions,
   neighborhoodOptions,
 } from '@/lib/event-data';
-import { palette } from '@/lib/palette';
 import { appTextInputStyle } from '@/lib/typography';
 import type { Gender, HostableCategory } from '@/lib/types';
 import { useSessionStore } from '@/stores/session-store';
 
 const MAX_GALLERY_PHOTOS = 6;
 
+// Same ambient photo the pre-auth welcome carousel opens on, so profile
+// setup reads as a continuation of that flow rather than a different app.
+const BACKDROP_IMAGE =
+  'https://images.unsplash.com/photo-1592753054398-9fa298d40e85?auto=format&fit=crop&w=1000&q=75';
+
+const dark = {
+  textPrimary: '#FFFFFF',
+  textSecondary: 'rgba(255,255,255,0.6)',
+  textMuted: 'rgba(255,255,255,0.4)',
+  surface: 'rgba(255,255,255,0.06)',
+  surfaceStrong: 'rgba(255,255,255,0.16)',
+  surfaceElevated: 'rgba(255,255,255,0.08)',
+  border: 'rgba(255,255,255,0.08)',
+  borderStrong: 'rgba(255,255,255,0.5)',
+  accent: '#8B5CF6',
+  accentEnd: '#6D28D9',
+  dangerText: '#FCA5A5',
+} as const;
+
 type OnboardingStep = {
   key: 'profile' | 'languages' | 'photos' | 'interests' | 'location';
-  label: string;
-  icon: IconlyIconName;
+  eyebrow: string;
+  title: string;
+  description: string;
 };
 
 const steps: OnboardingStep[] = [
-  { key: 'profile', label: 'Profile', icon: 'User' },
-  { key: 'languages', label: 'Languages', icon: 'MessageCircleDots' },
-  { key: 'photos', label: 'Photos', icon: 'Camera' },
-  { key: 'interests', label: 'Interests', icon: 'Sparkles' },
-  { key: 'location', label: 'Location', icon: 'Location' },
+  {
+    key: 'profile',
+    eyebrow: 'Profile',
+    title: 'Start with the basics.',
+    description: 'This is how other members will see you.',
+  },
+  {
+    key: 'languages',
+    eyebrow: 'Languages',
+    title: 'Which languages do you speak?',
+    description: "Pick every language you're comfortable chatting in — this helps us match you with the right people.",
+  },
+  {
+    key: 'photos',
+    eyebrow: 'Photos',
+    title: 'Add a profile picture.',
+    description: 'Choose a clear photo of yourself so people recognize you at events.',
+  },
+  {
+    key: 'interests',
+    eyebrow: 'Interests',
+    title: 'Choose categories.',
+    description: "Pick what excites you — we'll surface more of it in your feed.",
+  },
+  {
+    key: 'location',
+    eyebrow: 'Location',
+    title: 'Where are you based?',
+    description: "Share your location so we can show you what's happening nearby, or pick a neighborhood manually.",
+  },
 ];
 
 export default function OnboardingScreen() {
@@ -117,12 +164,7 @@ export default function OnboardingScreen() {
   };
 
   const goNext = () => {
-    if (!isActiveStepValid || isSubmitting) {
-      return;
-    }
-
-    if (isLastStep) {
-      void finishOnboarding();
+    if (!isActiveStepValid || isSubmitting || isLastStep) {
       return;
     }
 
@@ -241,6 +283,10 @@ export default function OnboardingScreen() {
   };
 
   async function finishOnboarding() {
+    if (!isActiveStepValid) {
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -269,179 +315,164 @@ export default function OnboardingScreen() {
   }
 
   return (
-    <View flex={1} backgroundColor={palette.white}>
+    <View flex={1} backgroundColor="#0B0B0D">
+      <Image source={BACKDROP_IMAGE} style={StyleSheet.absoluteFillObject} contentFit="cover" blurRadius={40} />
+      <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFillObject} />
+      <LinearGradient
+        colors={['rgba(11,11,13,0.75)', 'rgba(11,11,13,0.9)', 'rgba(11,11,13,0.97)']}
+        locations={[0, 0.5, 1]}
+        style={StyleSheet.absoluteFillObject}
+      />
+
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex}
       >
+        <XStack
+          position="absolute"
+          top={insets.top + 12}
+          left={20}
+          right={20}
+          zIndex={10}
+          alignItems="center"
+          gap={12}
+        >
+          <XStack flex={1} gap={6}>
+            {steps.map((step, index) => {
+              const isLocked = index > maxUnlockedIndex;
+
+              return (
+                <Pressable
+                  key={step.key}
+                  disabled={isLocked}
+                  onPress={() => goToStep(index)}
+                  style={styles.progressSegmentPressable}
+                >
+                  <View flex={1} height={3} borderRadius={999} backgroundColor="rgba(255,255,255,0.28)" overflow="hidden">
+                    <View
+                      height="100%"
+                      width={index <= stepIndex ? '100%' : '0%'}
+                      backgroundColor={dark.textPrimary}
+                      borderRadius={999}
+                    />
+                  </View>
+                </Pressable>
+              );
+            })}
+          </XStack>
+
+          <Text fontSize={13} fontWeight="700" color={dark.textPrimary}>
+            {stepIndex + 1}/{steps.length}
+          </Text>
+        </XStack>
+
         <ScrollView
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
-            paddingHorizontal: 16,
-            paddingTop: insets.top + 16,
-            paddingBottom: insets.bottom + 24,
+            paddingHorizontal: 20,
+            paddingTop: insets.top + 64,
+            paddingBottom: insets.bottom + 152,
           }}
         >
-          <YStack gap={16}>
-            <YStack gap={4}>
-              <SectionLabel>{isEditing ? 'Edit profile' : 'Welcome'}</SectionLabel>
-              <Text fontSize={28} lineHeight={34} fontWeight="800" color={palette.ink}>
-                {isEditing ? 'Update your details.' : 'Tell us about you.'}
+          <YStack gap={28}>
+            <YStack gap={6}>
+              <Text fontSize={12} fontWeight="800" letterSpacing={1} color={dark.textMuted} textTransform="uppercase">
+                {isEditing ? 'Edit profile' : activeStep.eyebrow}
               </Text>
-              <Text fontSize={14} lineHeight={22} color={palette.gray}>
-                {isEditing
-                  ? 'Change your basics, photos, interests, and location.'
-                  : 'Finish each step to unlock the next one and start with better local matches.'}
+              <Text fontSize={26} lineHeight={32} fontWeight="800" color={dark.textPrimary}>
+                {activeStep.title}
+              </Text>
+              <Text fontSize={14} lineHeight={20} color={dark.textSecondary}>
+                {activeStep.description}
               </Text>
             </YStack>
 
-            <XStack gap={6}>
-              {steps.map((step, index) => {
-                const isActive = index === stepIndex;
-                const isDone = index < stepIndex;
-                const isLocked = index > maxUnlockedIndex;
+            {activeStep.key === 'profile' ? (
+              <ProfileStep
+                name={name}
+                email={displayEmail}
+                ageText={ageText}
+                gender={gender}
+                onNameChange={setName}
+                onAgeChange={setAgeText}
+                onGenderChange={setGender}
+              />
+            ) : null}
 
-                return (
-                  <Pressable
-                    key={step.key}
-                    style={styles.stepPressable}
-                    disabled={isLocked}
-                    onPress={() => goToStep(index)}
-                  >
-                    <XStack
-                      height={42}
-                      alignItems="center"
-                      justifyContent="center"
-                      gap={6}
-                      borderRadius={12}
-                      borderWidth={1}
-                      borderColor={isActive ? palette.ink : palette.line}
-                      backgroundColor={isActive ? palette.ink : palette.white}
-                      paddingHorizontal={8}
-                      opacity={isLocked ? 0.45 : 1}
-                    >
-                      <View
-                        width={22}
-                        height={22}
-                        borderRadius={7}
-                        alignItems="center"
-                        justifyContent="center"
-                        backgroundColor={isActive ? 'rgba(255,255,255,0.14)' : palette.fog}
-                      >
-                        {isDone ? (
-                          <IconlyIcon name="Check" size={13} color={isActive ? palette.white : palette.ink} />
-                        ) : (
-                          <IconlyIcon name={step.icon} size={13} color={isActive ? palette.white : palette.slate} />
-                        )}
-                      </View>
-                      <Text
-                        fontSize={11}
-                        fontWeight="800"
-                        color={isActive ? palette.white : palette.inkSoft}
-                        numberOfLines={1}
-                      >
-                        {step.label}
-                      </Text>
-                    </XStack>
-                  </Pressable>
-                );
-              })}
-            </XStack>
+            {activeStep.key === 'languages' ? (
+              <LanguagesStep languages={languages} onToggle={toggleLanguage} />
+            ) : null}
 
-            <YStack
-              minHeight={420}
-              borderRadius={20}
-              backgroundColor={palette.white}
-              borderWidth={1}
-              borderColor={palette.line}
-              padding={16}
-            >
-              {activeStep.key === 'profile' ? (
-                <ProfileStep
-                  name={name}
-                  email={displayEmail}
-                  ageText={ageText}
-                  gender={gender}
-                  onNameChange={setName}
-                  onAgeChange={setAgeText}
-                  onGenderChange={setGender}
-                />
-              ) : null}
+            {activeStep.key === 'photos' ? (
+              <PhotosStep
+                name={displayName}
+                profileImage={profileImage}
+                photos={photos}
+                onPickProfileImage={pickProfileImage}
+                onAddGalleryPhotos={addGalleryPhotos}
+                onRemoveGalleryPhoto={removeGalleryPhoto}
+              />
+            ) : null}
 
-              {activeStep.key === 'languages' ? (
-                <LanguagesStep languages={languages} onToggle={toggleLanguage} />
-              ) : null}
+            {activeStep.key === 'interests' ? (
+              <CompactCategoryGrid
+                options={hostableCategories}
+                selectedValues={interests}
+                onToggle={(value) => toggleInterest(value as HostableCategory)}
+              />
+            ) : null}
 
-              {activeStep.key === 'photos' ? (
-                <PhotosStep
-                  name={displayName}
-                  profileImage={profileImage}
-                  photos={photos}
-                  onPickProfileImage={pickProfileImage}
-                  onAddGalleryPhotos={addGalleryPhotos}
-                  onRemoveGalleryPhoto={removeGalleryPhoto}
-                />
-              ) : null}
-
-              {activeStep.key === 'interests' ? (
-                <ChoiceStep
-                  eyebrow="Interests"
-                  title="What should your map surface first?"
-                  description="Select the event categories that deserve more space in your feed."
-                  options={hostableCategories}
-                  selectedValues={interests}
-                  onToggle={(value) => toggleInterest(value as HostableCategory)}
-                />
-              ) : null}
-
-              {activeStep.key === 'location' ? (
-                <LocationStep
-                  neighborhood={neighborhood}
-                  homeCoordinates={homeCoordinates}
-                  isLocating={isLocating}
-                  locationError={locationError}
-                  onDetectLocation={detectLocation}
-                  onSelectManualNeighborhood={selectManualNeighborhood}
-                />
-              ) : null}
-            </YStack>
-
-            <XStack alignItems="center" justifyContent="space-between" gap={12}>
-              <Pressable
-                disabled={isFirstStep && !isEditing}
-                onPress={goBack}
-                style={[styles.navButton, styles.backButton, isFirstStep && !isEditing && styles.disabledButton]}
-              >
-                <IconlyIcon name="ArrowLeft" size={16} color={isFirstStep && !isEditing ? palette.muted : palette.ink} />
-                <Text fontSize={14} fontWeight="800" color={isFirstStep && !isEditing ? palette.muted : palette.ink}>
-                  {isFirstStep && isEditing ? 'Cancel' : 'Back'}
-                </Text>
-              </Pressable>
-
-              <Pressable
-                disabled={!isActiveStepValid || isSubmitting}
-                onPress={goNext}
-                style={[
-                  styles.navButton,
-                  styles.nextButton,
-                  (!isActiveStepValid || isSubmitting) && styles.disabledButton,
-                ]}
-              >
-                {isSubmitting ? (
-                  <ActivityIndicator color={palette.white} />
-                ) : (
-                  <>
-                    <Text fontSize={14} fontWeight="800" color={palette.white}>
-                      {isLastStep ? (isEditing ? 'Save changes' : 'Finish setup') : 'Next'}
-                    </Text>
-                    <IconlyIcon name={isLastStep ? 'Check' : 'ChevronRight'} size={16} color={palette.white} />
-                  </>
-                )}
-              </Pressable>
-            </XStack>
+            {activeStep.key === 'location' ? (
+              <LocationStep
+                neighborhood={neighborhood}
+                homeCoordinates={homeCoordinates}
+                isLocating={isLocating}
+                locationError={locationError}
+                onDetectLocation={detectLocation}
+                onSelectManualNeighborhood={selectManualNeighborhood}
+              />
+            ) : null}
           </YStack>
         </ScrollView>
+
+        <XStack
+          position="absolute"
+          left={20}
+          right={20}
+          bottom={insets.bottom + 24}
+          alignItems="center"
+          gap={12}
+        >
+          <Pressable
+            disabled={isFirstStep && !isEditing}
+            onPress={goBack}
+            style={[styles.backButton, isFirstStep && !isEditing && styles.disabledButton]}
+          >
+            <IconlyIcon name="ChevronLeft" size={20} color={dark.textPrimary} />
+          </Pressable>
+
+          {isLastStep ? (
+            <View flex={1}>
+              <SlideToConfirm
+                label={isEditing ? 'Save changes' : 'Finish setup'}
+                confirmingLabel="Saving…"
+                onConfirm={finishOnboarding}
+                disabled={!isActiveStepValid || isSubmitting}
+              />
+            </View>
+          ) : (
+            <Pressable
+              disabled={!isActiveStepValid}
+              onPress={goNext}
+              style={[styles.nextButton, !isActiveStepValid && styles.disabledButton]}
+            >
+              <Text fontSize={15} fontWeight="800" color="#111114">
+                Next
+              </Text>
+            </Pressable>
+          )}
+        </XStack>
       </KeyboardAvoidingView>
     </View>
   );
@@ -465,32 +496,34 @@ function ProfileStep({
   onGenderChange: (value: Gender) => void;
 }) {
   return (
-    <YStack gap={18}>
-      <StepHeader eyebrow="Profile" title="Start with the basics." description={email} />
+    <YStack gap={20}>
+      <Text fontSize={13} color={dark.textMuted}>
+        {email}
+      </Text>
 
       <YStack gap={12}>
         <YStack gap={8}>
-          <Text fontSize={13} fontWeight="800" color={palette.ink}>
+          <Text fontSize={13} fontWeight="800" color={dark.textSecondary}>
             First name
           </Text>
           <TextInput
             value={name}
             onChangeText={onNameChange}
             placeholder="Your first name"
-            placeholderTextColor={palette.muted}
+            placeholderTextColor={dark.textMuted}
             style={styles.input}
           />
         </YStack>
 
         <YStack gap={8}>
-          <Text fontSize={13} fontWeight="800" color={palette.ink}>
+          <Text fontSize={13} fontWeight="800" color={dark.textSecondary}>
             Age
           </Text>
           <TextInput
             value={ageText}
             onChangeText={(value) => onAgeChange(value.replace(/[^0-9]/g, '').slice(0, 3))}
             placeholder="Your age"
-            placeholderTextColor={palette.muted}
+            placeholderTextColor={dark.textMuted}
             keyboardType="number-pad"
             maxLength={3}
             style={styles.input}
@@ -499,7 +532,7 @@ function ProfileStep({
       </YStack>
 
       <YStack gap={10}>
-        <Text fontSize={13} fontWeight="800" color={palette.ink}>
+        <Text fontSize={13} fontWeight="800" color={dark.textSecondary}>
           Gender
         </Text>
         <XStack flexWrap="wrap" gap={8}>
@@ -525,24 +558,16 @@ function LanguagesStep({
   onToggle: (value: string) => void;
 }) {
   return (
-    <YStack gap={18}>
-      <StepHeader
-        eyebrow="Languages"
-        title="Which languages do you speak?"
-        description="Pick every language you're comfortable chatting in — this helps us match you with the right people."
-      />
-
-      <XStack flexWrap="wrap" gap={8}>
-        {languageOptions.map((option) => (
-          <ChoiceChip
-            key={option}
-            label={option}
-            isSelected={languages.includes(option)}
-            onPress={() => onToggle(option)}
-          />
-        ))}
-      </XStack>
-    </YStack>
+    <XStack flexWrap="wrap" gap={8}>
+      {languageOptions.map((option) => (
+        <ChoiceChip
+          key={option}
+          label={option}
+          isSelected={languages.includes(option)}
+          onPress={() => onToggle(option)}
+        />
+      ))}
+    </XStack>
   );
 }
 
@@ -562,25 +587,19 @@ function PhotosStep({
   onRemoveGalleryPhoto: (uri: string) => void;
 }) {
   return (
-    <YStack gap={18}>
-      <StepHeader
-        eyebrow="Photos"
-        title="Add a profile picture."
-        description="Choose a clear photo of yourself so people recognize you at events."
-      />
-
+    <YStack gap={20}>
       <XStack alignItems="center" gap={16}>
-        <UserAvatar label={name} image={profileImage} size={84} borderWidth={2} borderColor={palette.line} />
+        <UserAvatar label={name} image={profileImage} size={84} borderWidth={2} borderColor="rgba(255,255,255,0.2)" />
         <YStack gap={8} flex={1}>
           <Pressable style={styles.photoActionButton} onPress={() => onPickProfileImage('camera')}>
-            <IconlyIcon name="Camera" size={16} color={palette.ink} />
-            <Text fontSize={13} fontWeight="800" color={palette.ink}>
+            <IconlyIcon name="Camera" size={16} color={dark.textPrimary} />
+            <Text fontSize={13} fontWeight="800" color={dark.textPrimary}>
               Take photo
             </Text>
           </Pressable>
           <Pressable style={styles.photoActionButton} onPress={() => onPickProfileImage('library')}>
-            <IconlyIcon name="Plus" size={16} color={palette.ink} />
-            <Text fontSize={13} fontWeight="800" color={palette.ink}>
+            <IconlyIcon name="Plus" size={16} color={dark.textPrimary} />
+            <Text fontSize={13} fontWeight="800" color={dark.textPrimary}>
               Choose from library
             </Text>
           </Pressable>
@@ -589,10 +608,10 @@ function PhotosStep({
 
       <YStack gap={10}>
         <XStack alignItems="center" justifyContent="space-between">
-          <Text fontSize={13} fontWeight="800" color={palette.ink}>
+          <Text fontSize={13} fontWeight="800" color={dark.textSecondary}>
             More photos (optional)
           </Text>
-          <Text fontSize={12} color={palette.muted}>
+          <Text fontSize={12} color={dark.textMuted}>
             {photos.length}/{MAX_GALLERY_PHOTOS}
           </Text>
         </XStack>
@@ -602,14 +621,14 @@ function PhotosStep({
             <View key={uri} width={76} height={76} borderRadius={14} overflow="hidden">
               <Image source={uri} style={{ width: 76, height: 76 }} contentFit="cover" />
               <Pressable style={styles.removePhotoButton} onPress={() => onRemoveGalleryPhoto(uri)}>
-                <IconlyIcon name="X" size={12} color={palette.white} />
+                <IconlyIcon name="X" size={12} color={dark.textPrimary} />
               </Pressable>
             </View>
           ))}
 
           {photos.length < MAX_GALLERY_PHOTOS ? (
             <Pressable style={styles.addPhotoTile} onPress={onAddGalleryPhotos}>
-              <IconlyIcon name="Plus" size={20} color={palette.slate} />
+              <IconlyIcon name="Plus" size={20} color={dark.textSecondary} />
             </Pressable>
           ) : null}
         </XStack>
@@ -634,41 +653,42 @@ function LocationStep({
   onSelectManualNeighborhood: (option: string) => void;
 }) {
   return (
-    <YStack gap={18}>
-      <StepHeader
-        eyebrow="Location"
-        title="Where are you based?"
-        description="Share your location so we can show you what's happening nearby, or pick a neighborhood manually."
-      />
-
-      <Pressable style={styles.locationButton} onPress={onDetectLocation} disabled={isLocating}>
-        {isLocating ? (
-          <ActivityIndicator color={palette.white} />
-        ) : (
-          <IconlyIcon name="Location" size={16} color={palette.white} />
-        )}
-        <Text fontSize={14} fontWeight="800" color={palette.white}>
-          {isLocating ? 'Finding you…' : 'Use my current location'}
-        </Text>
+    <YStack gap={20}>
+      <Pressable onPress={onDetectLocation} disabled={isLocating}>
+        <LinearGradient
+          colors={[dark.accent, dark.accentEnd]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.locationButton}
+        >
+          {isLocating ? (
+            <ActivityIndicator color={dark.textPrimary} />
+          ) : (
+            <IconlyIcon name="Location" size={16} color={dark.textPrimary} />
+          )}
+          <Text fontSize={14} fontWeight="800" color={dark.textPrimary}>
+            {isLocating ? 'Finding you…' : 'Use my current location'}
+          </Text>
+        </LinearGradient>
       </Pressable>
 
       {neighborhood ? (
         <XStack alignItems="center" gap={8}>
-          <IconlyIcon name="CheckCircle" size={16} color={palette.green} />
-          <Text fontSize={13} fontWeight="700" color={palette.ink}>
+          <IconlyIcon name="CheckCircle" size={16} color={dark.textPrimary} />
+          <Text fontSize={13} fontWeight="700" color={dark.textPrimary}>
             {homeCoordinates ? `Detected: ${neighborhood}` : neighborhood}
           </Text>
         </XStack>
       ) : null}
 
       {locationError ? (
-        <Text fontSize={12} color={palette.dangerText}>
+        <Text fontSize={12} color={dark.dangerText}>
           {locationError}
         </Text>
       ) : null}
 
       <YStack gap={10}>
-        <Text fontSize={13} fontWeight="800" color={palette.ink}>
+        <Text fontSize={13} fontWeight="800" color={dark.textSecondary}>
           Or choose a neighborhood
         </Text>
         <XStack flexWrap="wrap" gap={8}>
@@ -682,98 +702,6 @@ function LocationStep({
           ))}
         </XStack>
       </YStack>
-    </YStack>
-  );
-}
-
-function ChoiceStep({
-  eyebrow,
-  title,
-  description,
-  options,
-  selectedValues,
-  onToggle,
-}: {
-  eyebrow: string;
-  title: string;
-  description: string;
-  options: { value?: string; id?: string; label: string; emoji: string }[];
-  selectedValues: string[];
-  onToggle: (value: string) => void;
-}) {
-  return (
-    <YStack gap={18}>
-      <StepHeader eyebrow={eyebrow} title={title} description={description} />
-
-      <YStack gap={10}>
-        {options.map((option) => {
-          const value = option.value ?? option.id ?? option.label;
-          const isSelected = selectedValues.includes(value);
-
-          return (
-            <Pressable key={value} onPress={() => onToggle(value)}>
-              <XStack
-                minHeight={58}
-                alignItems="center"
-                justifyContent="space-between"
-                gap={12}
-                borderRadius={14}
-                borderWidth={1}
-                borderColor={isSelected ? palette.ink : palette.line}
-                backgroundColor={isSelected ? palette.ink : palette.white}
-                paddingHorizontal={12}
-                paddingVertical={10}
-              >
-                <XStack flex={1} minWidth={0} alignItems="center" gap={10}>
-                  <View
-                    width={36}
-                    height={36}
-                    borderRadius={10}
-                    alignItems="center"
-                    justifyContent="center"
-                    backgroundColor={isSelected ? 'rgba(255,255,255,0.14)' : palette.fog}
-                  >
-                    <Text fontSize={18}>{option.emoji}</Text>
-                  </View>
-                  <Text
-                    flex={1}
-                    minWidth={0}
-                    fontSize={14}
-                    fontWeight="800"
-                    color={isSelected ? palette.white : palette.ink}
-                    numberOfLines={1}
-                  >
-                    {option.label}
-                  </Text>
-                </XStack>
-                {isSelected ? <IconlyIcon name="Check" size={18} color={palette.white} /> : null}
-              </XStack>
-            </Pressable>
-          );
-        })}
-      </YStack>
-    </YStack>
-  );
-}
-
-function StepHeader({
-  eyebrow,
-  title,
-  description,
-}: {
-  eyebrow: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <YStack gap={6}>
-      <SectionLabel>{eyebrow}</SectionLabel>
-      <Text fontSize={22} lineHeight={28} fontWeight="800" color={palette.ink}>
-        {title}
-      </Text>
-      <Text fontSize={14} lineHeight={22} color={palette.gray}>
-        {description}
-      </Text>
     </YStack>
   );
 }
@@ -794,11 +722,11 @@ function ChoiceChip({
         alignItems="center"
         borderRadius={999}
         paddingHorizontal={13}
-        backgroundColor={isSelected ? palette.ink : palette.fog}
+        backgroundColor={isSelected ? dark.surfaceStrong : dark.surface}
         borderWidth={1}
-        borderColor={isSelected ? palette.ink : palette.line}
+        borderColor={isSelected ? dark.borderStrong : dark.border}
       >
-        <Text fontSize={13} fontWeight="800" color={isSelected ? palette.white : palette.inkSoft}>
+        <Text fontSize={13} fontWeight="800" color={isSelected ? dark.textPrimary : dark.textSecondary}>
           {label}
         </Text>
       </XStack>
@@ -810,50 +738,51 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  stepPressable: {
+  progressSegmentPressable: {
     flex: 1,
     minWidth: 0,
+    paddingVertical: 6,
   },
   input: {
     ...appTextInputStyle,
     minHeight: 46,
     borderWidth: 1,
-    borderColor: palette.line,
+    borderColor: dark.border,
     borderRadius: 12,
-    backgroundColor: palette.white,
-    color: palette.ink,
+    backgroundColor: dark.surfaceElevated,
+    color: dark.textPrimary,
     fontSize: 16,
     fontWeight: '700',
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  navButton: {
-    minHeight: 46,
-    minWidth: 112,
-    borderRadius: 14,
+  backButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: 16,
-  },
-  backButton: {
-    backgroundColor: palette.white,
+    backgroundColor: dark.surfaceElevated,
     borderWidth: 1,
-    borderColor: palette.line,
+    borderColor: dark.border,
   },
   nextButton: {
-    backgroundColor: palette.ink,
+    flex: 1,
+    height: 52,
+    borderRadius: 999,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   disabledButton: {
-    opacity: 0.45,
+    opacity: 0.4,
   },
   photoActionButton: {
     minHeight: 40,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: palette.line,
-    backgroundColor: palette.white,
+    borderColor: dark.border,
+    backgroundColor: dark.surfaceElevated,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -867,7 +796,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: 'rgba(17,17,20,0.7)',
+    backgroundColor: 'rgba(11,11,13,0.7)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -877,15 +806,14 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: palette.line,
-    backgroundColor: palette.fog,
+    borderColor: dark.border,
+    backgroundColor: dark.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
   locationButton: {
-    minHeight: 48,
-    borderRadius: 14,
-    backgroundColor: palette.ink,
+    minHeight: 52,
+    borderRadius: 999,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

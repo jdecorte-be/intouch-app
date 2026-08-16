@@ -45,6 +45,12 @@ Use a bottom navigation bar with four primary sections:
 
 Optional fifth destinations may be introduced only when strongly justified.
 
+The bottom nav sits on a dark surface and may include a raised circular primary action button (e.g. Create/Add) centered in the bar, floating above the tab strip. Use the white icon-button style for this control so it stays the clear visual anchor of the bar.
+
+### App Header
+
+On primary screens, the header uses a small wordmark plus an icon accent (e.g. a sparkle glyph in the accent color) top-left, with a notification icon and user avatar top-right. Keep the header compact and let content start high on the screen.
+
 ### Home
 
 The Home screen should include:
@@ -152,39 +158,41 @@ The design should feel:
 - Energetic
 - Modern
 - Mobile-native
+- Dark-first and immersive
 
-Avoid overly corporate layouts, dense information, harsh borders, and excessive color usage.
+The app is dark-first: near-black backgrounds are the default surface across onboarding, home, explore, category, and detail screens, not just the event detail page. Avoid overly corporate layouts, dense information, harsh borders, and excessive color usage.
 
 ### Visual Hierarchy
 
 Use:
 
 - Large imagery for emotional impact
-- Strong event titles
-- Small muted metadata
+- Strong event titles in white
+- Small muted light-gray metadata
 - Rounded cards
-- Soft shadows
+- Soft shadows and glow rather than hard borders
 - Compact chips
 - Avatar stacks for social proof
-- Purple as the main accent
-- Black and off-white as the primary neutrals
+- Purple as a light accent (logo mark, icons, badges, selected states) — not as a large fill
+- Near-black surfaces with white text as the primary neutrals; white/off-white pill shapes for primary buttons and floating controls
 
 ### Color Palette
 
-Use a restrained palette.
+The dark theme below is the primary, app-wide palette.
 
 ```css
 :root {
-  --background: #F7F7F8;
-  --surface: #FFFFFF;
-  --surface-dark: #0B0B0D;
-  --text-primary: #111114;
-  --text-secondary: #6F7178;
-  --text-inverse: #FFFFFF;
-  --border: #E8E8EC;
+  --background: #0B0B0D;
+  --surface: #151519;
+  --surface-elevated: #1C1C21;
+  --surface-overlay: rgba(255, 255, 255, 0.08);
+  --text-primary: #FFFFFF;
+  --text-secondary: #B8B8C0;
+  --text-inverse: #111114;
+  --border: #232328;
   --accent: #7C3AED;
   --accent-light: #A78BFA;
-  --accent-soft: #F0E9FF;
+  --accent-soft: #2A1F3D;
   --success: #22C55E;
   --warning: #F59E0B;
   --danger: #EF4444;
@@ -193,16 +201,20 @@ Use a restrained palette.
 
 Do not introduce additional brand colors unless required by event categories.
 
-### Dark Event Detail Variant
+### Light Surface Variant
 
-For immersive event detail pages, allow a dark surface:
+Reserve the light palette for specific secondary contexts only (e.g. forms, settings, or a marketing/web page) — it is no longer the app's default.
 
 ```css
---event-detail-background: #09090B;
---event-detail-surface: #151519;
---event-detail-text: #FFFFFF;
---event-detail-muted: #B8B8C0;
+--light-background: #F7F7F8;
+--light-surface: #FFFFFF;
+--light-text-primary: #111114;
+--light-text-secondary: #6F7178;
+--light-border: #E8E8EC;
+--light-accent-soft: #F0E9FF;
 ```
+
+Event detail pages should use `--background` / `--surface-elevated` for the most immersive contrast, since the hero image already carries most of the visual weight.
 
 ---
 
@@ -265,7 +277,15 @@ Do not mix many unrelated radius values.
 
 ## Shadows
 
-Use soft shadows instead of visible borders.
+On dark surfaces, express elevation primarily through surface color steps (`--surface` → `--surface-elevated`) rather than drop shadows, since black shadows are invisible on a near-black background. Use a subtle light glow for elevated or focused elements instead:
+
+```css
+box-shadow:
+  0 8px 30px rgba(0, 0, 0, 0.35),
+  0 0 0 1px rgba(255, 255, 255, 0.04);
+```
+
+For the light surface variant, use soft shadows instead of visible borders:
 
 ```css
 box-shadow:
@@ -273,7 +293,7 @@ box-shadow:
   0 2px 8px rgba(17, 17, 20, 0.05);
 ```
 
-Featured cards may use a slightly stronger shadow. Avoid heavy black shadows.
+Featured cards may use a slightly stronger shadow or glow. Avoid heavy black shadows on light surfaces, and avoid visible borders where a surface color step or shadow can do the job instead.
 
 ---
 
@@ -284,18 +304,15 @@ Featured cards may use a slightly stronger shadow. Avoid heavy black shadows.
 A featured event card should contain:
 
 - Large image
+- Price badge pinned to the top-left corner of the image (e.g. `$99`)
+- Favorite (heart) icon button pinned to the top-right corner, on a translucent circular backdrop
+- Attendee avatar stack with a joined-count label (e.g. `150+ Joined`), overlaid near the bottom of the image
+- Event title in bold white text
+- Location, date, and time as muted metadata with small icons
 - Small category badge
-- Event title
-- Location
-- Date
-- Time
-- Attendee avatars
-- Favorite action
 - Join button
 
-The image should occupy most of the card.
-
-Use a subtle gradient overlay to maintain text contrast.
+The image should occupy most of the card, sitting on a dark rounded card surface (`--surface`). Use a bottom gradient overlay (transparent to near-black) so the overlaid title, metadata, and avatar stack stay legible against the photo.
 
 ### Compact Event Card
 
@@ -354,8 +371,7 @@ Avatar stacks should communicate social activity without consuming too much spac
 
 ### Primary Button
 
-- Purple gradient or solid accent
-- White text
+- Default: solid white/off-white pill with dark text — the standard CTA against dark surfaces (`Next`, `Get Started`, `Join`)
 - Rounded pill shape
 - Minimum height: 48px
 - Strong contrast
@@ -364,21 +380,29 @@ Avatar stacks should communicate social activity without consuming too much spac
 Example:
 
 ```css
+background: var(--text-primary); /* white */
+color: var(--text-inverse); /* near-black */
+```
+
+Purple gradient pills remain available as an accent/alternate button style when an action needs to stand out further against a busy hero image, but they are not the default:
+
+```css
 background: linear-gradient(135deg, #8B5CF6, #6D28D9);
+color: #FFFFFF;
 ```
 
 ### Secondary Button
 
-- Neutral surface
+- Translucent white/neutral surface (`--surface-overlay`) on dark backgrounds
 - Subtle border
-- Dark text
+- White text
 - Rounded pill shape
 
 ### Icon Button
 
 - Circular
 - 40–44px
-- Semi-transparent surface on images
+- Semi-transparent surface on images (frosted light backdrop with dark icon, or translucent dark backdrop with white icon, matched to the underlying image)
 - Blur backdrop when used on hero media
 
 ---
@@ -427,6 +451,10 @@ Use short labels such as:
 Categories may use small icons, but icon style must remain consistent.
 
 Do not use more than one accent color per category chip.
+
+### Category Grid
+
+For a dedicated category-selection screen, lay categories out as a two-column grid of rounded dark cards, each with a centered circular icon badge and a label below it. The selected card uses a lightly raised surface (`--surface-elevated`) or a subtle accent-tinted border rather than a full purple fill. Pair the grid with a sticky full-width primary pill CTA (e.g. `Get Started`) at the bottom of the screen.
 
 ---
 
@@ -570,7 +598,7 @@ type ScheduleItem = {
 
 Implement these screens first:
 
-1. Splash or onboarding
+1. Splash or onboarding — see Onboarding below
 2. Location permission
 3. Home
 4. Explore
@@ -582,6 +610,20 @@ Implement these screens first:
 10. Profile
 11. Organizer profile
 12. Notifications
+
+---
+
+## Onboarding
+
+Onboarding screens use a full-bleed photo background with a dark gradient scrim rising from the bottom for text contrast. Include:
+
+- `Skip` as a plain text link, top-right
+- A bold multi-line headline low on the screen (e.g. `See what's happening around you`)
+- A short muted subtext line below the headline
+- A full-width primary pill button (`Next`, `Get Started`) near the bottom
+- Pagination dots or a thin progress bar indicating step position
+
+Keep copy short and emotional; let the photo carry most of the impact.
 
 ---
 
@@ -740,6 +782,11 @@ components/
     SearchBar
     FilterSheet
     CategoryChip
+    CategoryGrid
+    CategoryCard
+  onboarding/
+    OnboardingSlide
+    PaginationDots
   profile/
   booking/
   ui/
@@ -761,7 +808,7 @@ When generating UI:
 2. Prioritize image-led event discovery.
 3. Use purple only as an accent, not as a background everywhere.
 4. Keep cards rounded and spacious.
-5. Use black or dark detail pages only for immersive event views.
+5. Use the dark theme as the primary app-wide surface; reserve the light surface variant for specific secondary contexts only (forms, settings, web/marketing pages).
 6. Preserve visual consistency across all screens.
 7. Prefer reusable components over one-off markup.
 8. Do not invent unnecessary dashboard patterns.
@@ -781,7 +828,7 @@ A successful implementation should:
 
 - Feel visually close to the reference image
 - Make event imagery the dominant visual element
-- Use a clean white interface with purple accents
+- Use a dark, immersive interface with white primary actions and purple accents
 - Include social attendee indicators
 - Present event metadata clearly
 - Provide polished card layouts

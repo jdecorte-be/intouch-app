@@ -1,5 +1,5 @@
 import { BlurView } from 'expo-blur';
-import { useGlobalSearchParams, usePathname } from 'expo-router';
+import { useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -18,12 +18,14 @@ import { useSessionStore } from '@/stores/session-store';
 type TestingAction = {
   key: string;
   label: string;
+  description?: string;
   icon: IconlyIconName;
   onPress: () => void;
+  featured?: boolean;
   destructive?: boolean;
 };
 
-const BUTTON_SIZE = 42;
+const BUTTON_SIZE = 56;
 const MARGIN = 14;
 const EDGE_PADDING = 8;
 // Below this total drag distance, a release is treated as a tap rather than a drag.
@@ -32,6 +34,7 @@ const DRAG_TAP_THRESHOLD = 6;
 export function TestingMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const router = useRouter();
   const pathname = usePathname();
   const params = useGlobalSearchParams<{ id?: string | string[] }>();
   const insets = useSafeAreaInsets();
@@ -44,6 +47,7 @@ export function TestingMenu() {
   const firstEventId = useEventsStore((state) => state.events[0]?.id);
   const sendTestNotification = useNotificationsStore((state) => state.sendTestNotification);
   const testSignIn = useSessionStore((state) => state.testSignIn);
+  const testStartWelcomeOnboarding = useSessionStore((state) => state.testStartWelcomeOnboarding);
   const testSignInForOnboarding = useSessionStore((state) => state.testSignInForOnboarding);
   const signOut = useSessionStore((state) => state.signOut);
 
@@ -58,8 +62,17 @@ export function TestingMenu() {
 
   const toggleMenu = () => setIsOpen((current) => !current);
 
+  // Tap and drag are recognized independently and raced against each other, rather than
+  // inferred from the pan's finalize distance — that approach was flaky (a stationary touch
+  // can resolve as failed/cancelled before translation values are reliably populated).
+  const tapGesture = Gesture.Tap()
+    .maxDistance(DRAG_TAP_THRESHOLD)
+    .onEnd(() => {
+      runOnJS(toggleMenu)();
+    });
+
   const dragGesture = Gesture.Pan()
-    .minDistance(0)
+    .minDistance(DRAG_TAP_THRESHOLD)
     .onStart(() => {
       dragStartX.value = translateX.value;
       dragStartY.value = translateY.value;
@@ -67,15 +80,9 @@ export function TestingMenu() {
     .onUpdate((event) => {
       translateX.value = Math.min(maxTranslateX, Math.max(minTranslateX, dragStartX.value + event.translationX));
       translateY.value = Math.min(maxTranslateY, Math.max(minTranslateY, dragStartY.value + event.translationY));
-    })
-    .onFinalize((event) => {
-      // A quick tap often never crosses minDistance, so the gesture never activates and
-      // onEnd never fires. onFinalize always fires, active or not, so tap detection lives here.
-      const moved = Math.abs(event.translationX) + Math.abs(event.translationY);
-      if (moved < DRAG_TAP_THRESHOLD) {
-        runOnJS(toggleMenu)();
-      }
     });
+
+  const triggerGesture = Gesture.Race(dragGesture, tapGesture);
 
   const wrapperAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }, { translateY: translateY.value }],
@@ -92,6 +99,16 @@ export function TestingMenu() {
         : params.id
       : null;
 
+  const handleTestWelcomeOnboarding = () => {
+    testStartWelcomeOnboarding();
+    router.replace('/welcome');
+  };
+
+  const handleTestPostLoginOnboarding = () => {
+    testSignInForOnboarding();
+    router.replace('/onboarding');
+  };
+
   const actions: TestingAction[] = [
     ...(currentChatId
       ? [
@@ -105,15 +122,27 @@ export function TestingMenu() {
       : []),
     {
       key: 'test-user',
-      label: 'Test user',
+      label: 'Login with test account',
+      description: 'Use local test profile',
       icon: 'UserPlus',
       onPress: testSignIn,
+      featured: true,
     },
     {
-      key: 'test-onboarding',
-      label: 'Test onboarding',
-      icon: 'Cog',
-      onPress: testSignInForOnboarding,
+      key: 'test-login-onboarding',
+      label: 'Login onboarding',
+      description: 'Replay profile setup flow',
+      icon: 'Play',
+      onPress: handleTestPostLoginOnboarding,
+      featured: true,
+    },
+    {
+      key: 'test-welcome-onboarding',
+      label: 'Welcome onboarding',
+      description: 'Replay first-run flow',
+      icon: 'Play',
+      onPress: handleTestWelcomeOnboarding,
+      featured: true,
     },
     {
       key: 'sign-out',
@@ -201,19 +230,58 @@ export function TestingMenu() {
                       action.onPress();
                     }}
                   >
-                    <XStack height={42} alignItems="center" gap={10} paddingHorizontal={13}>
-                      <IconlyIcon
-                        name={action.icon}
-                        size={18}
-                        color={action.destructive ? palette.coral : palette.white}
-                      />
-                      <Text
-                        color={action.destructive ? palette.coral : palette.white}
-                        fontSize={13}
-                        fontWeight="700"
+                    <XStack
+                      minHeight={action.featured ? 54 : 42}
+                      alignItems="center"
+                      gap={10}
+                      marginHorizontal={action.featured ? 6 : 0}
+                      marginVertical={action.featured ? 3 : 0}
+                      paddingHorizontal={action.featured ? 9 : 13}
+                      borderRadius={action.featured ? 8 : 0}
+                      borderWidth={action.featured ? 1 : 0}
+                      borderColor={action.featured ? 'rgba(255,255,255,0.24)' : 'transparent'}
+                      backgroundColor={action.featured ? 'rgba(0,0,0,0.32)' : 'transparent'}
+                    >
+                      <View
+                        width={action.featured ? 30 : 18}
+                        height={action.featured ? 30 : 18}
+                        borderRadius={action.featured ? 8 : 0}
+                        alignItems="center"
+                        justifyContent="center"
+                        backgroundColor={action.featured ? 'rgba(255,255,255,0.16)' : 'transparent'}
                       >
-                        {action.label}
-                      </Text>
+                        <IconlyIcon
+                          name={action.icon}
+                          size={action.featured ? 16 : 18}
+                          color={action.destructive ? palette.coral : palette.white}
+                          weight={action.featured ? 'bold' : undefined}
+                        />
+                      </View>
+                      <YStack flex={1} gap={1}>
+                        <Text
+                          color={action.destructive ? palette.coral : palette.white}
+                          fontSize={13}
+                          lineHeight={17}
+                          fontWeight="800"
+                          numberOfLines={1}
+                        >
+                          {action.label}
+                        </Text>
+                        {action.description ? (
+                          <Text
+                            color="rgba(255,255,255,0.66)"
+                            fontSize={11}
+                            lineHeight={14}
+                            fontWeight="600"
+                            numberOfLines={1}
+                          >
+                            {action.description}
+                          </Text>
+                        ) : null}
+                      </YStack>
+                      {action.featured ? (
+                        <IconlyIcon name="ChevronRight" size={15} color="rgba(255,255,255,0.72)" />
+                      ) : null}
                     </XStack>
                   </Pressable>
                 ))}
@@ -221,9 +289,9 @@ export function TestingMenu() {
             </View>
           ) : null}
 
-          <GestureDetector gesture={dragGesture}>
+          <GestureDetector gesture={triggerGesture}>
             <View accessibilityRole="button" accessibilityLabel="Open testing menu" style={styles.trigger}>
-              <IconlyIcon name={isOpen ? 'ChevronDown' : 'Cog'} size={18} color={palette.white} />
+              <IconlyIcon name={isOpen ? 'ChevronDown' : 'Cog'} size={24} color={palette.white} weight="bold" />
             </View>
           </GestureDetector>
         </YStack>
@@ -242,8 +310,10 @@ const styles = StyleSheet.create({
     height: BUTTON_SIZE,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
+    borderRadius: 18,
     backgroundColor: palette.ink,
-    opacity: 0.2,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    opacity: 0.86,
   },
 });

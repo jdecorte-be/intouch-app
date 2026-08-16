@@ -4,15 +4,21 @@ import type { IconlyIconName } from '@/components/icons/iconly-types';
 
 export type EventCategory =
   | 'featured'
-  | 'art'
-  | 'sport'
-  | 'games'
   | 'social'
-  | 'educational'
-  | 'books'
-  | 'workshops'
-  | 'party'
-  | 'comedy';
+  | 'sports-fitness'
+  | 'outdoors-adventure'
+  | 'food-drinks'
+  | 'music-nightlife'
+  | 'games'
+  | 'arts-culture'
+  | 'learning-skills'
+  | 'tech-business'
+  | 'wellness'
+  | 'travel'
+  | 'volunteering'
+  | 'family'
+  | 'dating-singles'
+  | 'other';
 
 export type HostableCategory = Exclude<EventCategory, 'featured'>;
 
