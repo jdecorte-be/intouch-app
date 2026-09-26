@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, View, XStack, YStack } from 'tamagui';
 
 import { IconlyIcon } from '@/components/icons/iconly-icon';
+import { SUPPORT_EMAIL } from '@/lib/config';
 import { palette } from '@/lib/palette';
 
 const sections: { title: string; body: string }[] = [
@@ -29,7 +30,7 @@ const sections: { title: string; body: string }[] = [
   },
   {
     title: '6. Contact',
-    body: 'Questions about these terms can be sent to support@retalk.live.',
+    body: `Questions about these terms can be sent to ${SUPPORT_EMAIL}.`,
   },
 ];
 

@@ -63,7 +63,7 @@ export default function ExploreScreen() {
     ],
   );
   // Ignores the category chip so picking a category doesn't pull every
-  // other category's pins off the map — only the list panel and chip
+  // other category's pins off the map, only the list panel and chip
   // highlight react to it.
   const mapEvents = useMemo(
     () => selectVisibleMapEvents(eventsState),
@@ -164,7 +164,7 @@ export default function ExploreScreen() {
 
   const showUserLocation = () => locateUser(false);
 
-  // Drop the preview if the pin it belongs to falls off the map — e.g. a
+  // Drop the preview if the pin it belongs to falls off the map, e.g. a
   // category filter change or a map events refresh that no longer includes it.
   useEffect(() => {
     if (isPreviewOpen && selectedMapEvent && !displayedMapEvents.some((event) => event.id === selectedMapEvent.id)) {
@@ -173,7 +173,7 @@ export default function ExploreScreen() {
   }, [displayedMapEvents, isPreviewOpen, selectedMapEvent]);
 
   // Show the user's position on the map as soon as the screen mounts,
-  // without punching in — a manual tap on the locate button still zooms in.
+  // without punching in, a manual tap on the locate button still zooms in.
   useEffect(() => {
     locateUser(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps

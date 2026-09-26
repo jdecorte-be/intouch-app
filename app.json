@@ -14,7 +14,8 @@
         "NSPhotoLibraryUsageDescription": "InTouch needs access to your photos so you can set a profile picture and share photos in chats.",
         "NSCameraUsageDescription": "InTouch needs access to your camera so you can take a profile picture and share photos in chats."
       },
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.baristas.intouch"
     },
     "android": {
       "adaptiveIcon": {
@@ -59,7 +60,8 @@
           "cameraPermission": "InTouch needs access to your camera so you can take a profile picture and share photos in chats."
         }
       ],
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true

@@ -15,56 +15,8 @@ type NotificationsState = {
   markRead: (id: string) => void;
   markAllRead: () => void;
   respondToInvite: (id: string, status: NotificationInviteStatus) => void;
-  sendTestNotification: (kind: NotificationKind, eventId?: string) => void;
+  reset: () => void;
 };
-
-const testNotificationActors = ['Maya Chen', 'Jordan Patel', 'Sam Rivera', 'Aisha Khan', 'Noah Williams'];
-
-const testNotificationStyleByKind: Record<
-  NotificationKind,
-  { icon: NotificationItem['icon']; iconColor: string; iconBackground: string }
-> = {
-  comment: { icon: 'MessageCircleDots', iconColor: palette.primary, iconBackground: palette.primarySoft },
-  generated: { icon: 'Sparkles', iconColor: palette.warnText, iconBackground: palette.warnSoft },
-  invite: { icon: 'UserPlus', iconColor: palette.green, iconBackground: palette.tealSoft },
-  like: { icon: 'Heart', iconColor: palette.coral, iconBackground: palette.coralSoft },
-};
-
-function createTestNotification(kind: NotificationKind, eventId?: string): NotificationItem {
-  const actor = testNotificationActors[Math.floor(Math.random() * testNotificationActors.length)]!;
-  const style = testNotificationStyleByKind[kind];
-  const id = `test-notification-${kind}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-  const copyByKind: Record<NotificationKind, Pick<NotificationItem, 'title' | 'detail'>> = {
-    comment: {
-      title: 'commented on your event chat.',
-      detail: 'New reply in the conversation.',
-    },
-    generated: {
-      title: 'Your event summary is ready.',
-      detail: 'Open notifications to review the generated update.',
-    },
-    invite: {
-      title: 'invited you to join a plan.',
-      detail: 'Respond to the invitation from notifications.',
-    },
-    like: {
-      title: 'liked your event plan.',
-      detail: 'Someone is interested in what you are hosting.',
-    },
-  };
-
-  return {
-    id,
-    actor,
-    time: 'Just now',
-    unread: true,
-    kind,
-    eventId,
-    inviteStatus: kind === 'invite' ? 'pending' : undefined,
-    ...style,
-    ...copyByKind[kind],
-  };
-}
 
 export const useNotificationsStore = create<NotificationsState>()(
   persist(
@@ -125,14 +77,10 @@ export const useNotificationsStore = create<NotificationsState>()(
           ),
         })),
 
-      sendTestNotification: (kind, eventId) =>
-        set((state) => ({
-          notifications: [createTestNotification(kind, eventId), ...state.notifications],
-          hasLoaded: true,
-        })),
+      reset: () => set({ notifications: [], hasLoaded: false }),
     }),
     {
-      name: 'retalk-notifications',
+      name: 'intouch-notifications',
       storage: createJSONStorage(() => zustandStorage),
       partialize: (state) => ({ notifications: state.notifications, hasLoaded: state.hasLoaded }),
     },

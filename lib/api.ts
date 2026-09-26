@@ -1,3 +1,4 @@
+import { API_BASE_URL } from './config';
 import type { OnboardingProfileChanges } from './onboarding';
 import { palette } from './palette';
 import type {
@@ -10,17 +11,13 @@ import type {
   SessionUser,
 } from './types';
 
-// Single seam between the UI and the data source: every read/write goes
-// through the retalk-api NestJS backend. Routes live at the API root
-// (no /api/mobile prefix) — see ../retalk-api/src/*/*.controller.ts.
+// Every read and write goes through the NestJS backend. Routes live at the
+// API root.
 
 const NETWORK_DELAY_MS = 250;
-export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'https://api.retalk.live';
 
-// SuperTokens' default REST contract (supertokens-node, apiBasePath "/auth").
-// Session tokens are attached to every fetch() call automatically by the
-// global fetch patch installed in lib/supertokens.ts — nothing here passes
-// a bearer token by hand.
+// SuperTokens attaches session tokens to fetch() calls through the patch in
+// lib/supertokens.ts, so nothing here sets an auth header by hand.
 
 function delay<T>(value: T): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), NETWORK_DELAY_MS));
@@ -99,7 +96,7 @@ type SuperTokensUser = { id: string; emails?: string[] };
 
 // POSTs to SuperTokens' emailpassword /signup or /signin routes. On success
 // the backend's response sets the session tokens, which the global fetch
-// patch (lib/supertokens.ts) picks up automatically — the caller still has
+// patch (lib/supertokens.ts) picks up automatically, the caller still has
 // to follow up with fetchSession() to get the app's enriched profile, since
 // the SuperTokens user object only carries id/emails.
 async function submitEmailPasswordForm(
@@ -252,7 +249,7 @@ export async function completeGoogleSignIn(
 }
 
 // Finishes native Google Sign-In (see lib/google-signin.ts) by handing the
-// ID token straight to SuperTokens' /signinup route — no authorisation URL
+// ID token straight to SuperTokens' /signinup route, no authorisation URL
 // or redirect dance needed since the token comes from the on-device SDK.
 export async function completeGoogleSignInWithIdToken(idToken: string): Promise<SessionUser> {
   return signInUpWithGoogle({ oAuthTokens: { id_token: idToken } });
@@ -278,9 +275,9 @@ export async function fetchSession(): Promise<SessionUser | null> {
   return body.user ? toSessionUser(body.user) : null;
 }
 
-// Persists onboarding answers to the user's account (retalk-api's
+// Persists onboarding answers to the user's account (the backend's
 // PATCH /auth/onboarding) so completion is tracked server-side via
-// onboardingCompletedAt, rather than only in local device storage — the
+// onboardingCompletedAt, rather than only in local device storage, the
 // same endpoint mobile's "edit profile" flow reuses to update these fields.
 export async function completeOnboarding(changes: OnboardingProfileChanges): Promise<SessionUser> {
   const response = await fetch(`${API_BASE_URL}/auth/onboarding`, {
@@ -381,7 +378,7 @@ export async function fetchNotifications(): Promise<NotificationItem[]> {
 }
 
 export async function markNotificationRead(id: string): Promise<void> {
-  await fetch(`${API_BASE_URL}/notifications/${id}/read`, {
+  await fetch(`${API_BASE_URL}/notifications/${encodeURIComponent(id)}/read`, {
     method: 'PATCH',
     headers: jsonHeaders(),
   });
@@ -394,6 +391,8 @@ export async function markAllNotificationsRead(): Promise<void> {
   });
 }
 
+// No backend endpoint yet: the interest state is kept on the device and this
+// only simulates the round trip.
 export async function toggleEventInterest(
   _eventId: string,
   next: { going: number; isInterested: boolean },
@@ -432,7 +431,7 @@ function toChatMessage(raw: any): ChatMessage {
   };
 }
 
-// retalk-api's ChatThreadView doesn't include eventId, but it mints event
+// the backend's ChatThreadView doesn't include eventId, but it mints event
 // thread ids as `event-chat-${eventId}` (see ChatsService.joinEventChatForUser),
 // so it can be recovered from the id for kind: 'event' threads.
 function eventIdFromThreadId(raw: any): string | undefined {
@@ -489,7 +488,7 @@ export async function fetchChatThreads(): Promise<ChatThread[]> {
 }
 
 export async function fetchChatThread(threadId: string): Promise<ChatThread> {
-  const response = await fetch(`${API_BASE_URL}/chats/${threadId}`);
+  const response = await fetch(`${API_BASE_URL}/chats/${encodeURIComponent(threadId)}`);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch chat: ${response.status}`);
@@ -532,7 +531,7 @@ export async function startDirectChat(
   memberUserId: string,
   eventId?: string,
 ): Promise<ChatThread> {
-  // retalk-api's StartDirectChatDto requires eventId (direct chats are
+  // the backend's StartDirectChatDto requires eventId (direct chats are
   // always scoped to the event that introduced the two members).
   if (!eventId) {
     throw new Error('Starting a direct message requires an event to message about.');
@@ -564,7 +563,7 @@ export async function sendChatMessage(
   text: string,
   image?: string | null,
 ): Promise<ChatMessage> {
-  const response = await fetch(`${API_BASE_URL}/chats/${chatId}/messages`, {
+  const response = await fetch(`${API_BASE_URL}/chats/${encodeURIComponent(chatId)}/messages`, {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify({ text, image: image ?? undefined }),
@@ -575,9 +574,7 @@ export async function sendChatMessage(
   }
 
   const body = await response.json();
-  // retalk-api's send-message endpoint returns the whole updated thread
-  // rather than the single new message, so pull the last message off it —
-  // messages come back ordered oldest-first, and this request just added one.
+  // The endpoint returns the whole thread (oldest first), so take the last message.
   const thread = body.chat ?? body.thread ?? body;
   const messages = Array.isArray(thread.messages) ? thread.messages : [];
 
@@ -585,7 +582,7 @@ export async function sendChatMessage(
 }
 
 export async function markChatThreadRead(threadId: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/chats/${threadId}/read`, {
+  const response = await fetch(`${API_BASE_URL}/chats/${encodeURIComponent(threadId)}/read`, {
     method: 'POST',
     headers: jsonHeaders(),
   });
@@ -600,7 +597,8 @@ export async function toggleChatMessageReaction(
   messageId: string,
   emoji: string,
 ): Promise<ChatMessage> {
-  const response = await fetch(`${API_BASE_URL}/chats/${threadId}/messages/${messageId}/reactions`, {
+  const path = `${encodeURIComponent(threadId)}/messages/${encodeURIComponent(messageId)}/reactions`;
+  const response = await fetch(`${API_BASE_URL}/chats/${path}`, {
     method: 'POST',
     headers: jsonHeaders(),
     body: JSON.stringify({ emoji }),
@@ -623,7 +621,7 @@ export async function toggleChatMessageReaction(
 }
 
 export async function leaveChatThread(threadId: string): Promise<void> {
-  const response = await fetch(`${API_BASE_URL}/chats/${threadId}/leave`, {
+  const response = await fetch(`${API_BASE_URL}/chats/${encodeURIComponent(threadId)}/leave`, {
     method: 'POST',
     headers: jsonHeaders(),
   });

@@ -15,7 +15,7 @@ export const GROUP_SIZE_FILTER_MIN = 10;
 export const GROUP_SIZE_FILTER_MAX = 300;
 export const GROUP_SIZE_FILTER_STEP = 10;
 
-// Downtown Toronto — used as the distance-filter origin and initial map camera.
+// Downtown Toronto, used as the distance-filter origin and initial map camera.
 export const mapCenterCoordinates: [number, number] = [-79.3832, 43.6532];
 
 export function getEventPriceValueCad(price: string) {

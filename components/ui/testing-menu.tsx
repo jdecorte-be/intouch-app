@@ -10,9 +10,14 @@ import { Text, View, XStack, YStack } from 'tamagui';
 import { IconlyIcon, type IconlyIconName } from '@/components/icons/iconly-icon';
 import { palette } from '@/lib/palette';
 import type { NotificationKind } from '@/lib/types';
-import { useChatStore } from '@/stores/chat-store';
+import {
+  addRandomParticipantToChat,
+  sendTestNotification,
+  testSignIn,
+  testSignInForOnboarding,
+  testStartWelcomeOnboarding,
+} from '@/stores/dev-actions';
 import { useEventsStore } from '@/stores/events-store';
-import { useNotificationsStore } from '@/stores/notifications-store';
 import { useSessionStore } from '@/stores/session-store';
 
 type TestingAction = {
@@ -43,12 +48,7 @@ export function TestingMenu() {
   const translateY = useSharedValue(0);
   const dragStartX = useSharedValue(0);
   const dragStartY = useSharedValue(0);
-  const addRandomParticipantToChat = useChatStore((state) => state.addRandomParticipantToChat);
   const firstEventId = useEventsStore((state) => state.events[0]?.id);
-  const sendTestNotification = useNotificationsStore((state) => state.sendTestNotification);
-  const testSignIn = useSessionStore((state) => state.testSignIn);
-  const testStartWelcomeOnboarding = useSessionStore((state) => state.testStartWelcomeOnboarding);
-  const testSignInForOnboarding = useSessionStore((state) => state.testSignInForOnboarding);
   const signOut = useSessionStore((state) => state.signOut);
 
   const baseLeft = MARGIN;
@@ -63,7 +63,7 @@ export function TestingMenu() {
   const toggleMenu = () => setIsOpen((current) => !current);
 
   // Tap and drag are recognized independently and raced against each other, rather than
-  // inferred from the pan's finalize distance — that approach was flaky (a stationary touch
+  // inferred from the pan's finalize distance, that approach was flaky (a stationary touch
   // can resolve as failed/cancelled before translation values are reliably populated).
   const tapGesture = Gesture.Tap()
     .maxDistance(DRAG_TAP_THRESHOLD)

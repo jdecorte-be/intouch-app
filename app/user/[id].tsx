@@ -14,6 +14,7 @@ import { SectionLabel } from '@/components/ui/section-label';
 import { UserAvatar } from '@/components/ui/user-avatar';
 import { getBannerGradient, palette } from '@/lib/palette';
 import { getPersonProfile } from '@/lib/search-utils';
+import { WEB_BASE_URL } from '@/lib/config';
 import { useChatStore } from '@/stores/chat-store';
 import { useEventsStore } from '@/stores/events-store';
 import { useSessionStore } from '@/stores/session-store';
@@ -152,13 +153,13 @@ export default function UserProfileScreen() {
       } on InTouch.`
     : isAttendee
       ? `Attending ${profile.attendingEvents.length} ${profile.attendingEvents.length === 1 ? 'event' : 'events'} on InTouch.`
-      : 'New around here — no events yet.';
+      : 'New around here, no events yet.';
 
   const bioText = [profile.roles.length > 0 ? profile.roles.join(' · ') : null, activitySentence]
     .filter(Boolean)
-    .join(' — ');
+    .join(' · ');
 
-  const profileLink = `https://retalk.app/user/${encodeURIComponent(profile.key)}`;
+  const profileLink = `${WEB_BASE_URL}/user/${encodeURIComponent(profile.key)}`;
 
   const messagePerson = async () => {
     if (!profile.userId) {

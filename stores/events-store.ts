@@ -49,6 +49,7 @@ type EventsState = {
   hasActiveFilters: () => boolean;
   toggleInterest: (event: EventItem) => void;
   addEvent: (event: EventItem) => void;
+  clearInterests: () => void;
 };
 
 export const useEventsStore = create<EventsState>()(
@@ -136,6 +137,8 @@ export const useEventsStore = create<EventsState>()(
 
       addEvent: (event) => set((state) => ({ events: [event, ...state.events] })),
 
+      clearInterests: () => set({ interestById: {} }),
+
       toggleInterest: (event) => {
         const previous = getEventInterestState(event, get().interestById[event.id]);
 
@@ -175,7 +178,7 @@ export const useEventsStore = create<EventsState>()(
       },
     }),
     {
-      name: 'retalk-events',
+      name: 'intouch-events',
       storage: createJSONStorage(() => zustandStorage),
       partialize: (state) => ({ interestById: state.interestById }),
     },
@@ -236,7 +239,7 @@ export function selectVisibleMapEvents(state: EventsState): EventItem[] {
 
 // Per-category marker counts among events passing every filter except
 // category itself and currently rendered on screen (per the map's own
-// on-screen pixel-projection check — see postVisibleEventsUpdate in
+// on-screen pixel-projection check, see postVisibleEventsUpdate in
 // mapbox-map-html.ts), so the chip row tracks what's actually visible in
 // the current view (with how many pins) as the user pans/zooms.
 export function selectVisibleCategoryCounts(

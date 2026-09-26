@@ -20,6 +20,7 @@ import {
   splitStartsAt,
 } from '@/lib/event-utils';
 import { palette } from '@/lib/palette';
+import { WEB_BASE_URL } from '@/lib/config';
 import { getAttendeeKey, getPersonKey, getUniqueTopics } from '@/lib/search-utils';
 import { useChatStore } from '@/stores/chat-store';
 import { useEventsStore } from '@/stores/events-store';
@@ -170,7 +171,7 @@ export default function EventDetailScreen() {
   };
 
   const copyEventLink = async () => {
-    await Clipboard.setStringAsync(`https://retalk.app/event/${event.id}`);
+    await Clipboard.setStringAsync(`${WEB_BASE_URL}/event/${event.id}`);
     Alert.alert('Link copied', 'The event link is on your clipboard.');
   };
 

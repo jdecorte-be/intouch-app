@@ -7,7 +7,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import { TamaguiProvider } from 'tamagui';
 
-import { TestingMenu } from '@/components/ui/testing-menu';
 import { palette } from '@/lib/palette';
 import { canUseNativeModules } from '@/lib/runtime';
 import { initSuperTokens } from '@/lib/supertokens';
@@ -42,6 +41,15 @@ const navigationTheme = {
     border: palette.line,
   },
 };
+
+// The testing menu and its helpers are development-only. Requiring them behind
+// __DEV__ lets Metro drop them from release bundles.
+let TestingMenu: (typeof import('@/components/ui/testing-menu'))['TestingMenu'] | null = null;
+
+if (__DEV__) {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  TestingMenu = require('@/components/ui/testing-menu').TestingMenu;
+}
 
 export default function RootLayout() {
   const [isReady, setIsReady] = useState(false);
@@ -120,7 +128,7 @@ export default function RootLayout() {
             </Stack.Protected>
           </Stack>
           <StatusBar style="dark" />
-          <TestingMenu />
+          {TestingMenu ? <TestingMenu /> : null}
         </ThemeProvider>
       </TamaguiProvider>
     </GestureHandlerRootView>

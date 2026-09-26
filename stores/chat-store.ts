@@ -22,12 +22,12 @@ type ChatState = {
   joinEventChat: (event: EventItem) => Promise<string>;
   startDirectChat: (memberName: string, memberUserId: string, eventId?: string) => Promise<string>;
   sendMessage: (chatId: string, text: string, author: string, image?: string | null) => void;
-  addRandomParticipantToChat: (chatId: string) => void;
   toggleReaction: (chatId: string, messageId: string, emoji: string) => void;
   votePoll: (messageId: string, optionIndex: number, optionCount: number) => void;
   leaveChat: (chatId: string) => Promise<void>;
   markThreadRead: (chatId: string) => void;
   dismissError: () => void;
+  reset: () => void;
 };
 
 function upsertThread(threads: ChatThread[], thread: ChatThread, replaceMessages = false) {
@@ -54,25 +54,6 @@ function upsertThread(threads: ChatThread[], thread: ChatThread, replaceMessages
           : candidate,
       )
     : [thread, ...threads];
-}
-
-const randomJoinParticipants: ChatParticipant[] = [
-  { id: 'test-join-maya-chen', name: 'Maya Chen', image: null },
-  { id: 'test-join-jordan-patel', name: 'Jordan Patel', image: null },
-  { id: 'test-join-sam-rivera', name: 'Sam Rivera', image: null },
-  { id: 'test-join-aisha-khan', name: 'Aisha Khan', image: null },
-  { id: 'test-join-noah-williams', name: 'Noah Williams', image: null },
-  { id: 'test-join-zoe-martin', name: 'Zoe Martin', image: null },
-  { id: 'test-join-leo-thompson', name: 'Leo Thompson', image: null },
-  { id: 'test-join-priya-shah', name: 'Priya Shah', image: null },
-];
-
-function createOverflowParticipant(chatId: string, index: number): ChatParticipant {
-  return {
-    id: `test-join-${chatId}-${Date.now()}-${index}`,
-    name: `Guest ${index + 1}`,
-    image: null,
-  };
 }
 
 export const useChatStore = create<ChatState>()(
@@ -234,48 +215,6 @@ export const useChatStore = create<ChatState>()(
         });
       },
 
-      addRandomParticipantToChat: (chatId) => {
-        set((state) => {
-          const thread = state.threads.find((candidate) => candidate.id === chatId);
-
-          if (!thread) {
-            return state;
-          }
-
-          const existingIds = new Set(thread.participants.map((participant) => participant.id));
-          const availableParticipants = randomJoinParticipants.filter(
-            (participant) => !existingIds.has(participant.id),
-          );
-          const nextParticipant =
-            availableParticipants[Math.floor(Math.random() * availableParticipants.length)] ??
-            createOverflowParticipant(chatId, thread.participants.length);
-          const nextParticipants = [...thread.participants, nextParticipant];
-          const joinMessage: ChatMessage = {
-            id: `${chatId}-join-${nextParticipant.id}-${Date.now()}`,
-            author: nextParticipant.name,
-            authorId: nextParticipant.id,
-            authorImage: nextParticipant.image,
-            fromSelf: false,
-            text: `${nextParticipant.name} joined the chat.`,
-            sentAt: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-            kind: 'system',
-            reactions: [],
-          };
-          const updatedThread: ChatThread = {
-            ...thread,
-            participants: nextParticipants,
-            participantCount: Math.max(thread.participantCount + 1, nextParticipants.length),
-            messages: [...thread.messages, joinMessage],
-          };
-
-          return {
-            threads: state.threads.map((candidate) =>
-              candidate.id === chatId ? updatedThread : candidate,
-            ),
-          };
-        });
-      },
-
       toggleReaction: (chatId, messageId, emoji) => {
         const hasSession = useSessionStore.getState().hasSession;
 
@@ -409,9 +348,11 @@ export const useChatStore = create<ChatState>()(
       },
 
       dismissError: () => set({ error: null }),
+
+      reset: () => set({ threads: [], hasLoaded: false, error: null, pollVotes: {} }),
     }),
     {
-      name: 'retalk-chats',
+      name: 'intouch-chats',
       storage: createJSONStorage(() => zustandStorage),
       partialize: (state) => ({
         threads: state.threads,

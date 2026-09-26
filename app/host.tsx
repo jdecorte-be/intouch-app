@@ -154,7 +154,7 @@ export default function HostScreen() {
       title: title.trim(),
       description:
         description.trim() ||
-        `Hosted by ${hostName}. Details coming soon — join the chat to ask anything.`,
+        `Hosted by ${hostName}. Details coming soon. Join the chat to ask anything.`,
       venue: venue.trim(),
       neighborhood,
       category,

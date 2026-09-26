@@ -6,13 +6,16 @@ import * as api from '@/lib/api';
 import type { OnboardingProfileChanges } from '@/lib/onboarding';
 import { zustandStorage } from '@/lib/storage';
 import type { EventItem, SessionUser } from '@/lib/types';
+import { useChatStore } from '@/stores/chat-store';
+import { useEventsStore } from '@/stores/events-store';
+import { useNotificationsStore } from '@/stores/notifications-store';
 
 type ProfileOverrides = Record<string, Partial<SessionUser>>;
 
 type SessionState = {
   user: SessionUser | null;
   // Whether `user` is backed by a real SuperTokens session (vs. the local,
-  // token-less test user) — SuperTokens manages the actual session tokens
+  // token-less test user), SuperTokens manages the actual session tokens
   // itself, so the app never sees or stores them directly.
   hasSession: boolean;
   isLoading: boolean;
@@ -26,9 +29,6 @@ type SessionState = {
   loadSession: () => Promise<void>;
   markWelcomeSeen: () => void;
   signIn: (email: string, password: string) => Promise<void>;
-  testSignIn: () => void;
-  testStartWelcomeOnboarding: () => void;
-  testSignInForOnboarding: () => void;
   register: (name: string, email: string, password: string) => Promise<void>;
   completeGoogleAuth: (
     code: string,
@@ -50,22 +50,6 @@ function applyProfileOverrides(user: SessionUser | null, overrides: ProfileOverr
 
   return { ...user, ...overrides[user.id] };
 }
-
-const testUser: SessionUser = {
-  id: 'test-user-local',
-  name: 'Test User',
-  email: 'test@retalk.local',
-  age: 27,
-  gender: 'prefer-not-to-say',
-  languagesSpoken: ['English'],
-  image: null,
-  photos: [],
-  homeNeighborhood: 'Queen West',
-  homeCoordinates: null,
-  eventInterests: ['social', 'art', 'party'],
-  eventGoals: ['meet-new-people', 'go-out-tonight'],
-  memberSince: 'July 2026',
-};
 
 export const useSessionStore = create<SessionState>()(
   persist(
@@ -93,7 +77,7 @@ export const useSessionStore = create<SessionState>()(
         }
 
         if (user) {
-          // Already have a cached session — revalidate in the background so
+          // Already have a cached session, revalidate in the background so
           // startup never blocks on a network round trip.
           void api
             .fetchSession()
@@ -131,69 +115,6 @@ export const useSessionStore = create<SessionState>()(
         const user = await api.signInWithCredentials(email, password);
         set({ hasSession: true, user: applyProfileOverrides(user, get().profileOverrides) });
         void get().refreshMyActivity();
-      },
-
-      testSignIn: () => {
-        set({
-          hasSession: false,
-          user: applyProfileOverrides(testUser, get().profileOverrides),
-          completedOnboardingUserIds: get().completedOnboardingUserIds.includes(testUser.id)
-            ? get().completedOnboardingUserIds
-            : [...get().completedOnboardingUserIds, testUser.id],
-          hostedEvents: [],
-          hostedGroups: [],
-          interestedEvents: [],
-          interestedGroups: [],
-        });
-      },
-
-      testStartWelcomeOnboarding: () => {
-        const hadSession = get().hasSession;
-
-        set({
-          user: null,
-          hasSession: false,
-          hasSeenWelcome: false,
-          hostedEvents: [],
-          hostedGroups: [],
-          interestedEvents: [],
-          interestedGroups: [],
-        });
-
-        if (hadSession) {
-          void SuperTokens.signOut().catch(() => {});
-        }
-      },
-
-      // Debug-only helper (see the "Debug: test onboarding" button on the
-      // login screen) that drops the test user back to a blank, incomplete
-      // profile so the onboarding flow can be replayed on demand instead of
-      // only being reachable once, on a brand-new account.
-      testSignInForOnboarding: () => {
-        const { [testUser.id]: _removedOverride, ...remainingOverrides } = get().profileOverrides;
-
-        set({
-          hasSession: false,
-          user: {
-            ...testUser,
-            name: '',
-            age: null,
-            gender: null,
-            languagesSpoken: [],
-            image: null,
-            photos: [],
-            homeNeighborhood: null,
-            homeCoordinates: null,
-            eventInterests: [],
-            onboardingCompletedAt: null,
-          },
-          profileOverrides: remainingOverrides,
-          completedOnboardingUserIds: get().completedOnboardingUserIds.filter((id) => id !== testUser.id),
-          hostedEvents: [],
-          hostedGroups: [],
-          interestedEvents: [],
-          interestedGroups: [],
-        });
       },
 
       register: async (name, email, password) => {
@@ -294,6 +215,11 @@ export const useSessionStore = create<SessionState>()(
           await SuperTokens.signOut().catch(() => {});
         }
 
+        // Persisted per-user data must not outlive the account on this device.
+        useChatStore.getState().reset();
+        useNotificationsStore.getState().reset();
+        useEventsStore.getState().clearInterests();
+
         set({
           user: null,
           hasSession: false,
@@ -305,7 +231,7 @@ export const useSessionStore = create<SessionState>()(
       },
     }),
     {
-      name: 'retalk-session',
+      name: 'intouch-session',
       storage: createJSONStorage(() => zustandStorage),
       partialize: (state) => ({
         user: state.user,

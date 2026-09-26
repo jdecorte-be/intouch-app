@@ -2,15 +2,21 @@ import type { EventCategory, EventItem, Gender, HostableCategory } from './types
 
 export const categories: { id: EventCategory; label: string; emoji: string }[] = [
   { id: 'featured', label: 'Featured', emoji: '✨' },
-  { id: 'art', label: 'Art', emoji: '🎨' },
-  { id: 'sport', label: 'Sport', emoji: '🏃' },
-  { id: 'games', label: 'Games', emoji: '🎮' },
   { id: 'social', label: 'Social', emoji: '🫶' },
-  { id: 'educational', label: 'Educational', emoji: '🧠' },
-  { id: 'books', label: 'Books', emoji: '📚' },
-  { id: 'workshops', label: 'Workshops', emoji: '🛠️' },
-  { id: 'party', label: 'Party', emoji: '🪩' },
-  { id: 'comedy', label: 'Comedy', emoji: '🎭' },
+  { id: 'sports-fitness', label: 'Sports & fitness', emoji: '🏃' },
+  { id: 'outdoors-adventure', label: 'Outdoors', emoji: '🥾' },
+  { id: 'food-drinks', label: 'Food & drinks', emoji: '🍜' },
+  { id: 'music-nightlife', label: 'Music & nightlife', emoji: '🪩' },
+  { id: 'games', label: 'Games', emoji: '🎮' },
+  { id: 'arts-culture', label: 'Arts & culture', emoji: '🎨' },
+  { id: 'learning-skills', label: 'Learning', emoji: '🧠' },
+  { id: 'tech-business', label: 'Tech & business', emoji: '💼' },
+  { id: 'wellness', label: 'Wellness', emoji: '🧘' },
+  { id: 'travel', label: 'Travel', emoji: '✈️' },
+  { id: 'volunteering', label: 'Volunteering', emoji: '🤲' },
+  { id: 'family', label: 'Family', emoji: '👨‍👩‍👧' },
+  { id: 'dating-singles', label: 'Dating & singles', emoji: '💜' },
+  { id: 'other', label: 'Other', emoji: '📌' },
 ];
 
 export const hostableCategories = categories.filter(
@@ -19,15 +25,21 @@ export const hostableCategories = categories.filter(
 );
 
 export const categoryAccents: Record<HostableCategory, string> = {
-  art: '#ff6b9d',
-  sport: '#2ee6c9',
-  games: '#7c83fd',
   social: '#ff9de2',
-  educational: '#5eb1ff',
-  books: '#ffb84d',
-  workshops: '#3ddc84',
-  party: '#c084fc',
-  comedy: '#ff9457',
+  'sports-fitness': '#2ee6c9',
+  'outdoors-adventure': '#3ddc84',
+  'food-drinks': '#ffb84d',
+  'music-nightlife': '#c084fc',
+  games: '#7c83fd',
+  'arts-culture': '#ff6b9d',
+  'learning-skills': '#5eb1ff',
+  'tech-business': '#38bdf8',
+  wellness: '#86efac',
+  travel: '#fbbf24',
+  volunteering: '#f87171',
+  family: '#fdba74',
+  'dating-singles': '#f9a8d4',
+  other: '#94a3b8',
 };
 
 function hexToHsl(hex: string) {
@@ -81,7 +93,7 @@ function hslToHex(h: number, s: number, l: number) {
   return `#${toHex(hueToRgb(p, q, h + 1 / 3))}${toHex(hueToRgb(p, q, h))}${toHex(hueToRgb(p, q, h - 1 / 3))}`;
 }
 
-// Brighter, lighter take on a category accent — used for the border of
+// Brighter, lighter take on a category accent, used for the border of
 // group map pins so groups read as a livelier ring than the flat accent.
 export function lightenAccent(hex: string) {
   const { h, s, l } = hexToHsl(hex);
@@ -164,55 +176,87 @@ export function formatCanadianPrice(price: string) {
 }
 
 // Curated Unsplash crops per category so every event gets a warm, social
-// photo that fits its vibe — same pools as the web app.
+// photo that fits its vibe, same pools as the web app.
 const unsplashPhoto = (photoId: string, width = 900) =>
   `https://images.unsplash.com/${photoId}?auto=format&fit=crop&w=${width}&q=70`;
 
 const categoryImagePools: Record<HostableCategory, string[]> = {
-  art: [
-    unsplashPhoto('photo-1547891654-e66ed7ebb968'),
-    unsplashPhoto('photo-1513364776144-60967b0f800f'),
-    unsplashPhoto('photo-1460661419201-fd4cecdf8a8b'),
+  social: [
+    unsplashPhoto('photo-1529156069898-49953e39b3ac'),
+    unsplashPhoto('photo-1517457373958-b7bdd4587205'),
+    unsplashPhoto('photo-1529333166437-7750a6dd5a70'),
   ],
-  sport: [
+  'sports-fitness': [
     unsplashPhoto('photo-1571019613454-1cb2f99b2d8b'),
     unsplashPhoto('photo-1461896836934-ffe607ba8211'),
     unsplashPhoto('photo-1552674605-db6ffd4facb5'),
+  ],
+  'outdoors-adventure': [
+    unsplashPhoto('photo-1461896836934-ffe607ba8211'),
+    unsplashPhoto('photo-1552674605-db6ffd4facb5'),
+    unsplashPhoto('photo-1529333166437-7750a6dd5a70'),
+  ],
+  'food-drinks': [
+    unsplashPhoto('photo-1529156069898-49953e39b3ac'),
+    unsplashPhoto('photo-1517457373958-b7bdd4587205'),
+    unsplashPhoto('photo-1492684223066-81342ee5ff30'),
+  ],
+  'music-nightlife': [
+    unsplashPhoto('photo-1492684223066-81342ee5ff30'),
+    unsplashPhoto('photo-1514525253161-7a46d19cd819'),
+    unsplashPhoto('photo-1566737236500-c8ac43014a67'),
   ],
   games: [
     unsplashPhoto('photo-1606167668584-78701c57f13d'),
     unsplashPhoto('photo-1611996575749-79a3a250f948'),
     unsplashPhoto('photo-1556438064-2d7646166914'),
   ],
-  social: [
-    unsplashPhoto('photo-1529156069898-49953e39b3ac'),
-    unsplashPhoto('photo-1517457373958-b7bdd4587205'),
-    unsplashPhoto('photo-1529333166437-7750a6dd5a70'),
+  'arts-culture': [
+    unsplashPhoto('photo-1547891654-e66ed7ebb968'),
+    unsplashPhoto('photo-1513364776144-60967b0f800f'),
+    unsplashPhoto('photo-1460661419201-fd4cecdf8a8b'),
+    unsplashPhoto('photo-1527224857830-43a7acc85260'),
   ],
-  educational: [
+  'learning-skills': [
     unsplashPhoto('photo-1522202176988-66273c2fd55f'),
     unsplashPhoto('photo-1516321318423-f06f85e504b3'),
     unsplashPhoto('photo-1519389950473-47ba0277781c'),
-  ],
-  books: [
     unsplashPhoto('photo-1512820790803-83ca734da794'),
-    unsplashPhoto('photo-1521587760476-6c12a4b040da'),
-    unsplashPhoto('photo-1519682337058-a94d519337bc'),
   ],
-  workshops: [
+  'tech-business': [
     unsplashPhoto('photo-1522202176988-66273c2fd55f'),
     unsplashPhoto('photo-1556761175-b413da4baf72'),
     unsplashPhoto('photo-1531482615713-2afd69097998'),
   ],
-  party: [
-    unsplashPhoto('photo-1492684223066-81342ee5ff30'),
-    unsplashPhoto('photo-1514525253161-7a46d19cd819'),
+  wellness: [
+    unsplashPhoto('photo-1571019613454-1cb2f99b2d8b'),
+    unsplashPhoto('photo-1552674605-db6ffd4facb5'),
+    unsplashPhoto('photo-1522202176988-66273c2fd55f'),
+  ],
+  travel: [
+    unsplashPhoto('photo-1529333166437-7750a6dd5a70'),
+    unsplashPhoto('photo-1552674605-db6ffd4facb5'),
     unsplashPhoto('photo-1566737236500-c8ac43014a67'),
   ],
-  comedy: [
-    unsplashPhoto('photo-1527224857830-43a7acc85260'),
-    unsplashPhoto('photo-1560439514-4e9645039924'),
-    unsplashPhoto('photo-1551818255-e6e10975bc17'),
+  volunteering: [
+    unsplashPhoto('photo-1529156069898-49953e39b3ac'),
+    unsplashPhoto('photo-1529333166437-7750a6dd5a70'),
+    unsplashPhoto('photo-1516321318423-f06f85e504b3'),
+  ],
+  family: [
+    unsplashPhoto('photo-1517457373958-b7bdd4587205'),
+    unsplashPhoto('photo-1606167668584-78701c57f13d'),
+    unsplashPhoto('photo-1512820790803-83ca734da794'),
+  ],
+  'dating-singles': [
+    unsplashPhoto('photo-1514525253161-7a46d19cd819'),
+    unsplashPhoto('photo-1529156069898-49953e39b3ac'),
+    unsplashPhoto('photo-1566737236500-c8ac43014a67'),
+  ],
+  other: [
+    unsplashPhoto('photo-1529156069898-49953e39b3ac'),
+    unsplashPhoto('photo-1519389950473-47ba0277781c'),
+    unsplashPhoto('photo-1556761175-b413da4baf72'),
   ],
 };
 

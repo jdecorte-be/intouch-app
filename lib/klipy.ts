@@ -98,7 +98,7 @@ export function getKlipyCustomerId() {
     return stored;
   }
 
-  const generated = `retalk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  const generated = `intouch-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   storage.set(CUSTOMER_ID_STORAGE_KEY, generated);
 
   return generated;
@@ -133,7 +133,7 @@ export function searchMedia(mediaType: KlipyMediaType, query: string, page: numb
 
 // Klipy's monetization model is pay-per-share: this call is what actually
 // attributes usage to our API key, so it needs to fire whenever an item is
-// sent. Fire-and-forget — a flaky network here shouldn't block the send.
+// sent. Fire-and-forget, a flaky network here shouldn't block the send.
 export function reportMediaShare(mediaType: KlipyMediaType, slug: string) {
   if (!KLIPY_API_KEY) {
     return;

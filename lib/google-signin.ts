@@ -1,12 +1,12 @@
 import type * as GoogleSigninModule from '@react-native-google-signin/google-signin';
 
-// Native Google Sign-In (Android only for now — see components/auth/auth-screen.tsx).
+// Native Google Sign-In (Android only for now, see components/auth/auth-screen.tsx).
 // webClientId must be the same "Web application" OAuth client the backend's
 // SuperTokens ThirdParty(Google) recipe is configured with (AUTH_GOOGLE_ID in
 // intouch-api), so the ID token this returns is audienced for a client the
 // backend already trusts. The Android OAuth client registered in Google
 // Cloud Console (matching this app's package name + signing certificate) is
-// what actually authorizes the native sign-in call at the OS level — its id
+// what actually authorizes the native sign-in call at the OS level, its id
 // is never referenced here.
 
 // This package registers a native module as soon as it's evaluated, which
