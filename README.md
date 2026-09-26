@@ -1,49 +1,97 @@
-# ReTalk App 📍
+# InTouch
 
-Native mobile version of the [ReTalk](../ReTalk) web app — discover local events and groups around Toronto, join their chats, and host your own activities. The app uses a feed-style Home screen, a map-first Explore screen with a draggable event sheet, a floating bottom nav, and the ReTalk ink/coral/teal palette.
+Welcome! This is the codebase for InTouch, a mobile app for discovering local events and groups, joining their chats, and hosting your own activities.
 
-## Stack
+## What's in the app
 
-- **Expo SDK 54** + **expo-router v6** (typed routes)
-- **Tamagui** for the design system (custom ReTalk theme in `tamagui.config.ts`)
-- **Iconsax icons** via `iconsax-react-native` and the typed wrapper in `components/icons/iconly-icon.tsx`
-- **Zustand** stores (`stores/`) persisted with **MMKV** (`lib/storage.ts`, falls back to in-memory storage in Expo Go/web)
-- **Mapbox GL** inside `react-native-webview` for the Explore map (falls back to a stylized board until a Mapbox public token is set)
+- **Discover**: feed-style Home with hero event swiper, trending and nearby sections, and category filtering
+- **Explore**: map-first view (Mapbox GL) with a draggable event sheet and category chips
+- **Chat**: group and direct messaging with replies, reactions, polls, GIFs (Klipy), photos, and location sharing
+- **Tickets**: upcoming, saved, and past events
+- **Host**: create events and groups from a guided form
+- **Auth and onboarding**: email and Google sign-in via SuperTokens, plus an interest-based onboarding flow
 
-## Structure
+## Development resources
+
+This is a [React Native](https://reactnative.dev/) application built with [Expo](https://expo.dev/) and written in TypeScript. It uses a dark-first design system built on [Tamagui](https://tamagui.dev/).
+
+- **Expo SDK 54** and **expo-router** (file-based, typed routes), React Native 0.81
+- **Zustand** stores persisted with **MMKV**, encrypted with a random key kept in the OS keychain (`expo-secure-store`). Where native modules are unavailable it falls back to in-memory storage (`lib/storage.ts`)
+- **SuperTokens** session handling (`lib/supertokens.ts`) and an axios API client (`lib/api.ts`)
+- **Mapbox GL JS** rendered in `react-native-webview`, with a stylized fallback board when no token is set
+- **Reanimated** and **Gesture Handler** for animation and gestures
+
+`AGENT.md` is the source of truth for the product, design system, UX rules, and component guidance. Read it before making design or architecture changes.
+
+### Project structure
 
 ```
-app/                 expo-router routes
-  (tabs)/            Home, Explore (map), Chats, Profile
-  event/[id].tsx     event / group detail
-  chat/[id].tsx      conversation
-  host.tsx           host-an-activity modal
-  filters.tsx        distance / price / size / date filters modal
-components/          UI building blocks (events, home, nav, icons, ui)
-stores/              zustand stores: events, chats, session
-lib/                 types, utils, palette, MMKV storage, mock data
-lib/api.ts           ⬅ single seam for the future PostgreSQL backend
+app/          expo-router routes
+  (tabs)/     Home, Explore, Chats, Tickets, Profile
+  event/      event and group detail
+  chat/       conversation
+  user/       public profile
+  host.tsx, filters.tsx, onboarding.tsx, auth flows
+components/   UI building blocks, grouped by feature (auth, chat, events, home, icons, nav, ui)
+stores/       Zustand stores: session, events, chats, notifications
+lib/          API client, types, date/event/filter utilities, storage
+  map/        stylesheet and client script for the Mapbox WebView
+__tests__/    Vitest unit tests for the pure logic in lib/
 ```
 
-## Running it
+`lib/api.ts` is the single boundary between the app and the backend.
 
-MMKV and Mapbox are native modules, so use a development build (not Expo Go):
+## Getting started
+
+MMKV, Google Sign-In, and the map use native modules, so run a development build rather than Expo Go.
 
 ```bash
 npm install
-npx expo run:android   # or: npx expo run:ios
+cp .env.example .env    # then fill in the values
+npx expo run:ios        # or: npx expo run:android
 ```
 
-### Mapbox maps
+### Environment variables
 
-Set a Mapbox public access token before starting the app:
+See `.env.example` for the full list. All `EXPO_PUBLIC_*` values are bundled into the client, so only put public keys there.
+
+| Variable | Purpose |
+| --- | --- |
+| `EXPO_PUBLIC_API_BASE_URL` | Backend and SuperTokens API domain |
+| `EXPO_PUBLIC_WEB_BASE_URL` | Web app URL used in share links |
+| `EXPO_PUBLIC_SUPPORT_EMAIL` | Support address shown in the terms |
+| `EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN` | Mapbox public token for the live map |
+| `EXPO_PUBLIC_KLIPY_API_KEY` | GIF picker in chat |
+| `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Google Sign-In web client id |
+
+### Scripts
 
 ```bash
-EXPO_PUBLIC_MAPBOX_ACCESS_TOKEN=pk.your-mapbox-public-token
+npm run lint         # ESLint (expo lint)
+npm run typecheck    # tsc --noEmit
+npm test             # Vitest unit tests
 ```
 
-Until then the Explore screen renders a fallback event board instead of the live map.
+A `Makefile` wraps these commands: run `make help` to list the targets (`make check` runs lint and typecheck).
 
-## PostgreSQL later
+CI runs typecheck, lint and tests on every push to `master`, then builds the Android app with EAS (`.github/workflows/eas-build.yml`).
 
-Live event and auth data come from the configured backend. If events cannot be loaded, Home falls back to `lib/mock-data.ts` so the app remains usable during local development or backend outages.
+## Contributions
+
+> [!NOTE]
+> This is a proprietary project. Outside contributions are not accepted unless agreed in writing beforehand.
+
+If you have access and want to change something:
+
+- Check for existing issues before filing a new one.
+- Discuss larger changes before opening a PR.
+- Reuse existing components and patterns, and follow `AGENT.md`.
+- Run `npm run lint` and `npm run typecheck` before submitting.
+
+## Security disclosures
+
+If you discover a security issue, please report it privately to the maintainer rather than opening a public issue.
+
+## License
+
+Proprietary. Copyright (c) 2026 John Decorte. All rights reserved. See [LICENSE](./LICENSE); no use, copying, or distribution without written permission.
