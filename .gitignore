@@ -2,12 +2,23 @@
 
 # dependencies
 node_modules/
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 
 # Expo
 .expo/
+.expo-shared/
 dist/
 web-build/
 expo-env.d.ts
+
+# generated native folders
+/ios
+/android
 
 # Native
 .kotlin/
@@ -17,29 +28,57 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+*.keystore
+Pods/
+xcuserdata/
+*.xcworkspace/xcuserdata/
+.gradle/
+local.properties
 
 # Metro
 .metro-health-check*
 
-# debug
+# debug / logs
+*.log
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+pnpm-debug.log*
 
-# macOS
-.DS_Store
-*.pem
+# testing
+coverage/
+.nyc_output/
+*.lcov
 
-# local env files
-.env
-.env.*
-!.env.example
+# lint / cache
+.eslintcache
+.cache/
 
 # typescript
 *.tsbuildinfo
 
-app-example
+# EAS
+.eas/
 
-# generated native folders
-/ios
-/android
+# local env files / secrets
+.env
+.env.*
+!.env.example
+*.pem
+
+# OS
+.DS_Store
+Thumbs.db
+
+# editors / tooling
+.claude/
+CLAUDE.md
+AGENT.md
+.vscode/
+.idea/
+*.swp
+*.swo
+.history/
+
+# misc
+app-example
