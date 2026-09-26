@@ -1,97 +1,31 @@
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
-import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-} from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, View, XStack, YStack } from 'tamagui';
 
 import { IconlyIcon } from '@/components/icons/iconly-icon';
 import { CompactCategoryGrid } from '@/components/onboarding/compact-category-grid';
+import { LanguagesStep } from '@/components/onboarding/languages-step';
+import { LocationStep } from '@/components/onboarding/location-step';
+import { isValidAge, steps, type OnboardingStep } from '@/components/onboarding/onboarding-steps';
+import { dark, onboardingStyles } from '@/components/onboarding/onboarding-styles';
+import { PhotosStep } from '@/components/onboarding/photos-step';
+import { ProfileStep } from '@/components/onboarding/profile-step';
+import { useHomeLocation } from '@/components/onboarding/use-home-location';
+import { useProfilePhotos } from '@/components/onboarding/use-profile-photos';
 import { SlideToConfirm } from '@/components/ui/slide-to-confirm';
-import { UserAvatar } from '@/components/ui/user-avatar';
-import {
-  genderOptions,
-  hostableCategories,
-  languageOptions,
-  neighborhoodOptions,
-} from '@/lib/event-data';
-import { appTextInputStyle } from '@/lib/typography';
+import { hostableCategories } from '@/lib/event-data';
 import type { Gender, HostableCategory } from '@/lib/types';
 import { useSessionStore } from '@/stores/session-store';
-
-const MAX_GALLERY_PHOTOS = 6;
 
 // Same ambient photo the pre-auth welcome carousel opens on, so profile
 // setup reads as a continuation of that flow rather than a different app.
 const BACKDROP_IMAGE =
   'https://images.unsplash.com/photo-1592753054398-9fa298d40e85?auto=format&fit=crop&w=1000&q=75';
-
-const dark = {
-  textPrimary: '#FFFFFF',
-  textSecondary: 'rgba(255,255,255,0.6)',
-  textMuted: 'rgba(255,255,255,0.4)',
-  surface: 'rgba(255,255,255,0.06)',
-  surfaceStrong: 'rgba(255,255,255,0.16)',
-  surfaceElevated: 'rgba(255,255,255,0.08)',
-  border: 'rgba(255,255,255,0.08)',
-  borderStrong: 'rgba(255,255,255,0.5)',
-  accent: '#8B5CF6',
-  accentEnd: '#6D28D9',
-  dangerText: '#FCA5A5',
-} as const;
-
-type OnboardingStep = {
-  key: 'profile' | 'languages' | 'photos' | 'interests' | 'location';
-  eyebrow: string;
-  title: string;
-  description: string;
-};
-
-const steps: OnboardingStep[] = [
-  {
-    key: 'profile',
-    eyebrow: 'Profile',
-    title: 'Start with the basics.',
-    description: 'This is how other members will see you.',
-  },
-  {
-    key: 'languages',
-    eyebrow: 'Languages',
-    title: 'Which languages do you speak?',
-    description: "Pick every language you're comfortable chatting in — this helps us match you with the right people.",
-  },
-  {
-    key: 'photos',
-    eyebrow: 'Photos',
-    title: 'Add a profile picture.',
-    description: 'Choose a clear photo of yourself so people recognize you at events.',
-  },
-  {
-    key: 'interests',
-    eyebrow: 'Interests',
-    title: 'Choose categories.',
-    description: "Pick what excites you — we'll surface more of it in your feed.",
-  },
-  {
-    key: 'location',
-    eyebrow: 'Location',
-    title: 'Where are you based?',
-    description: "Share your location so we can show you what's happening nearby, or pick a neighborhood manually.",
-  },
-];
 
 export default function OnboardingScreen() {
   const router = useRouter();
@@ -108,15 +42,13 @@ export default function OnboardingScreen() {
   const [ageText, setAgeText] = useState(user?.age ? String(user.age) : '');
   const [gender, setGender] = useState<Gender | null>(user?.gender ?? null);
   const [languages, setLanguages] = useState<string[]>(user?.languagesSpoken ?? []);
-  const [profileImage, setProfileImage] = useState<string | null>(user?.image ?? null);
-  const [photos, setPhotos] = useState<string[]>(user?.photos ?? []);
   const [interests, setInterests] = useState<HostableCategory[]>(user?.eventInterests ?? []);
-  const [neighborhood, setNeighborhood] = useState(user?.homeNeighborhood ?? '');
-  const [homeCoordinates, setHomeCoordinates] = useState<[number, number] | null>(
-    user?.homeCoordinates ?? null,
-  );
-  const [isLocating, setIsLocating] = useState(false);
-  const [locationError, setLocationError] = useState<string | null>(null);
+  const { profileImage, photos, pickProfileImage, addGalleryPhotos, removeGalleryPhoto } = useProfilePhotos({
+    image: user?.image ?? null,
+    photos: user?.photos ?? [],
+  });
+  const { neighborhood, homeCoordinates, isLocating, locationError, detectLocation, selectManualNeighborhood } =
+    useHomeLocation({ neighborhood: user?.homeNeighborhood ?? '', coordinates: user?.homeCoordinates ?? null });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const activeStep = steps[stepIndex];
@@ -129,7 +61,7 @@ export default function OnboardingScreen() {
   );
 
   const age = Number.parseInt(ageText, 10);
-  const isAgeValid = ageText.trim().length > 0 && Number.isFinite(age) && age >= 13 && age <= 110;
+  const isAgeValid = isValidAge(ageText);
 
   const stepValidity: Record<OnboardingStep['key'], boolean> = {
     profile: name.trim().length > 0 && isAgeValid && gender !== null,
@@ -182,106 +114,6 @@ export default function OnboardingScreen() {
     setStepIndex((current) => Math.max(current - 1, 0));
   };
 
-  const pickProfileImage = async (source: 'camera' | 'library') => {
-    const permission =
-      source === 'camera'
-        ? await ImagePicker.requestCameraPermissionsAsync()
-        : await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-    if (!permission.granted) {
-      Alert.alert(
-        'Permission needed',
-        source === 'camera'
-          ? 'Allow camera access to take a profile picture.'
-          : 'Allow photo library access to choose a profile picture.',
-      );
-      return;
-    }
-
-    const result =
-      source === 'camera'
-        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.8 })
-        : await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'],
-            allowsEditing: true,
-            aspect: [1, 1],
-            quality: 0.8,
-          });
-
-    if (!result.canceled && result.assets[0]) {
-      setProfileImage(result.assets[0].uri);
-    }
-  };
-
-  const addGalleryPhotos = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-    if (!permission.granted) {
-      Alert.alert('Permission needed', 'Allow photo library access to add photos to your profile.');
-      return;
-    }
-
-    const remainingSlots = MAX_GALLERY_PHOTOS - photos.length;
-
-    if (remainingSlots <= 0) {
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsMultipleSelection: true,
-      selectionLimit: remainingSlots,
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      setPhotos((current) => [...current, ...result.assets.map((asset) => asset.uri)].slice(0, MAX_GALLERY_PHOTOS));
-    }
-  };
-
-  const removeGalleryPhoto = (uri: string) => {
-    setPhotos((current) => current.filter((item) => item !== uri));
-  };
-
-  const detectLocation = async () => {
-    setLocationError(null);
-    setIsLocating(true);
-
-    try {
-      const permission = await Location.requestForegroundPermissionsAsync();
-
-      if (!permission.granted) {
-        setLocationError('Location permission was denied. Choose a neighborhood below instead.');
-        return;
-      }
-
-      const position = await Location.getCurrentPositionAsync({});
-      const [place] = await Location.reverseGeocodeAsync({
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      });
-
-      const detectedLabel = place?.district || place?.city || place?.subregion || place?.region;
-
-      if (!detectedLabel) {
-        setLocationError('Could not determine your neighborhood. Choose one below instead.');
-        return;
-      }
-
-      setNeighborhood(detectedLabel);
-      setHomeCoordinates([position.coords.longitude, position.coords.latitude]);
-    } catch {
-      setLocationError('Something went wrong finding your location. Choose a neighborhood below instead.');
-    } finally {
-      setIsLocating(false);
-    }
-  };
-
-  const selectManualNeighborhood = (option: string) => {
-    setHomeCoordinates(null);
-    setNeighborhood((current) => (current === option ? '' : option));
-  };
-
   async function finishOnboarding() {
     if (!isActiveStepValid) {
       return;
@@ -326,7 +158,7 @@ export default function OnboardingScreen() {
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.flex}
+        style={onboardingStyles.flex}
       >
         <XStack
           position="absolute"
@@ -346,7 +178,7 @@ export default function OnboardingScreen() {
                   key={step.key}
                   disabled={isLocked}
                   onPress={() => goToStep(index)}
-                  style={styles.progressSegmentPressable}
+                  style={onboardingStyles.progressSegmentPressable}
                 >
                   <View flex={1} height={3} borderRadius={999} backgroundColor="rgba(255,255,255,0.28)" overflow="hidden">
                     <View
@@ -447,7 +279,7 @@ export default function OnboardingScreen() {
           <Pressable
             disabled={isFirstStep && !isEditing}
             onPress={goBack}
-            style={[styles.backButton, isFirstStep && !isEditing && styles.disabledButton]}
+            style={[onboardingStyles.backButton, isFirstStep && !isEditing && onboardingStyles.disabledButton]}
           >
             <IconlyIcon name="ChevronLeft" size={20} color={dark.textPrimary} />
           </Pressable>
@@ -465,7 +297,7 @@ export default function OnboardingScreen() {
             <Pressable
               disabled={!isActiveStepValid}
               onPress={goNext}
-              style={[styles.nextButton, !isActiveStepValid && styles.disabledButton]}
+              style={[onboardingStyles.nextButton, !isActiveStepValid && onboardingStyles.disabledButton]}
             >
               <Text fontSize={15} fontWeight="800" color="#111114">
                 Next
@@ -477,346 +309,3 @@ export default function OnboardingScreen() {
     </View>
   );
 }
-
-function ProfileStep({
-  name,
-  email,
-  ageText,
-  gender,
-  onNameChange,
-  onAgeChange,
-  onGenderChange,
-}: {
-  name: string;
-  email: string;
-  ageText: string;
-  gender: Gender | null;
-  onNameChange: (value: string) => void;
-  onAgeChange: (value: string) => void;
-  onGenderChange: (value: Gender) => void;
-}) {
-  return (
-    <YStack gap={20}>
-      <Text fontSize={13} color={dark.textMuted}>
-        {email}
-      </Text>
-
-      <YStack gap={12}>
-        <YStack gap={8}>
-          <Text fontSize={13} fontWeight="800" color={dark.textSecondary}>
-            First name
-          </Text>
-          <TextInput
-            value={name}
-            onChangeText={onNameChange}
-            placeholder="Your first name"
-            placeholderTextColor={dark.textMuted}
-            style={styles.input}
-          />
-        </YStack>
-
-        <YStack gap={8}>
-          <Text fontSize={13} fontWeight="800" color={dark.textSecondary}>
-            Age
-          </Text>
-          <TextInput
-            value={ageText}
-            onChangeText={(value) => onAgeChange(value.replace(/[^0-9]/g, '').slice(0, 3))}
-            placeholder="Your age"
-            placeholderTextColor={dark.textMuted}
-            keyboardType="number-pad"
-            maxLength={3}
-            style={styles.input}
-          />
-        </YStack>
-      </YStack>
-
-      <YStack gap={10}>
-        <Text fontSize={13} fontWeight="800" color={dark.textSecondary}>
-          Gender
-        </Text>
-        <XStack flexWrap="wrap" gap={8}>
-          {genderOptions.map((option) => (
-            <ChoiceChip
-              key={option.value}
-              label={option.label}
-              isSelected={gender === option.value}
-              onPress={() => onGenderChange(option.value)}
-            />
-          ))}
-        </XStack>
-      </YStack>
-    </YStack>
-  );
-}
-
-function LanguagesStep({
-  languages,
-  onToggle,
-}: {
-  languages: string[];
-  onToggle: (value: string) => void;
-}) {
-  return (
-    <XStack flexWrap="wrap" gap={8}>
-      {languageOptions.map((option) => (
-        <ChoiceChip
-          key={option}
-          label={option}
-          isSelected={languages.includes(option)}
-          onPress={() => onToggle(option)}
-        />
-      ))}
-    </XStack>
-  );
-}
-
-function PhotosStep({
-  name,
-  profileImage,
-  photos,
-  onPickProfileImage,
-  onAddGalleryPhotos,
-  onRemoveGalleryPhoto,
-}: {
-  name: string;
-  profileImage: string | null;
-  photos: string[];
-  onPickProfileImage: (source: 'camera' | 'library') => void;
-  onAddGalleryPhotos: () => void;
-  onRemoveGalleryPhoto: (uri: string) => void;
-}) {
-  return (
-    <YStack gap={20}>
-      <XStack alignItems="center" gap={16}>
-        <UserAvatar label={name} image={profileImage} size={84} borderWidth={2} borderColor="rgba(255,255,255,0.2)" />
-        <YStack gap={8} flex={1}>
-          <Pressable style={styles.photoActionButton} onPress={() => onPickProfileImage('camera')}>
-            <IconlyIcon name="Camera" size={16} color={dark.textPrimary} />
-            <Text fontSize={13} fontWeight="800" color={dark.textPrimary}>
-              Take photo
-            </Text>
-          </Pressable>
-          <Pressable style={styles.photoActionButton} onPress={() => onPickProfileImage('library')}>
-            <IconlyIcon name="Plus" size={16} color={dark.textPrimary} />
-            <Text fontSize={13} fontWeight="800" color={dark.textPrimary}>
-              Choose from library
-            </Text>
-          </Pressable>
-        </YStack>
-      </XStack>
-
-      <YStack gap={10}>
-        <XStack alignItems="center" justifyContent="space-between">
-          <Text fontSize={13} fontWeight="800" color={dark.textSecondary}>
-            More photos (optional)
-          </Text>
-          <Text fontSize={12} color={dark.textMuted}>
-            {photos.length}/{MAX_GALLERY_PHOTOS}
-          </Text>
-        </XStack>
-
-        <XStack flexWrap="wrap" gap={10}>
-          {photos.map((uri) => (
-            <View key={uri} width={76} height={76} borderRadius={14} overflow="hidden">
-              <Image source={uri} style={{ width: 76, height: 76 }} contentFit="cover" />
-              <Pressable style={styles.removePhotoButton} onPress={() => onRemoveGalleryPhoto(uri)}>
-                <IconlyIcon name="X" size={12} color={dark.textPrimary} />
-              </Pressable>
-            </View>
-          ))}
-
-          {photos.length < MAX_GALLERY_PHOTOS ? (
-            <Pressable style={styles.addPhotoTile} onPress={onAddGalleryPhotos}>
-              <IconlyIcon name="Plus" size={20} color={dark.textSecondary} />
-            </Pressable>
-          ) : null}
-        </XStack>
-      </YStack>
-    </YStack>
-  );
-}
-
-function LocationStep({
-  neighborhood,
-  homeCoordinates,
-  isLocating,
-  locationError,
-  onDetectLocation,
-  onSelectManualNeighborhood,
-}: {
-  neighborhood: string;
-  homeCoordinates: [number, number] | null;
-  isLocating: boolean;
-  locationError: string | null;
-  onDetectLocation: () => void;
-  onSelectManualNeighborhood: (option: string) => void;
-}) {
-  return (
-    <YStack gap={20}>
-      <Pressable onPress={onDetectLocation} disabled={isLocating}>
-        <LinearGradient
-          colors={[dark.accent, dark.accentEnd]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.locationButton}
-        >
-          {isLocating ? (
-            <ActivityIndicator color={dark.textPrimary} />
-          ) : (
-            <IconlyIcon name="Location" size={16} color={dark.textPrimary} />
-          )}
-          <Text fontSize={14} fontWeight="800" color={dark.textPrimary}>
-            {isLocating ? 'Finding you…' : 'Use my current location'}
-          </Text>
-        </LinearGradient>
-      </Pressable>
-
-      {neighborhood ? (
-        <XStack alignItems="center" gap={8}>
-          <IconlyIcon name="CheckCircle" size={16} color={dark.textPrimary} />
-          <Text fontSize={13} fontWeight="700" color={dark.textPrimary}>
-            {homeCoordinates ? `Detected: ${neighborhood}` : neighborhood}
-          </Text>
-        </XStack>
-      ) : null}
-
-      {locationError ? (
-        <Text fontSize={12} color={dark.dangerText}>
-          {locationError}
-        </Text>
-      ) : null}
-
-      <YStack gap={10}>
-        <Text fontSize={13} fontWeight="800" color={dark.textSecondary}>
-          Or choose a neighborhood
-        </Text>
-        <XStack flexWrap="wrap" gap={8}>
-          {neighborhoodOptions.map((option) => (
-            <ChoiceChip
-              key={option}
-              label={option}
-              isSelected={neighborhood === option}
-              onPress={() => onSelectManualNeighborhood(option)}
-            />
-          ))}
-        </XStack>
-      </YStack>
-    </YStack>
-  );
-}
-
-function ChoiceChip({
-  label,
-  isSelected,
-  onPress,
-}: {
-  label: string;
-  isSelected: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress}>
-      <XStack
-        height={36}
-        alignItems="center"
-        borderRadius={999}
-        paddingHorizontal={13}
-        backgroundColor={isSelected ? dark.surfaceStrong : dark.surface}
-        borderWidth={1}
-        borderColor={isSelected ? dark.borderStrong : dark.border}
-      >
-        <Text fontSize={13} fontWeight="800" color={isSelected ? dark.textPrimary : dark.textSecondary}>
-          {label}
-        </Text>
-      </XStack>
-    </Pressable>
-  );
-}
-
-const styles = StyleSheet.create({
-  flex: {
-    flex: 1,
-  },
-  progressSegmentPressable: {
-    flex: 1,
-    minWidth: 0,
-    paddingVertical: 6,
-  },
-  input: {
-    ...appTextInputStyle,
-    minHeight: 46,
-    borderWidth: 1,
-    borderColor: dark.border,
-    borderRadius: 12,
-    backgroundColor: dark.surfaceElevated,
-    color: dark.textPrimary,
-    fontSize: 16,
-    fontWeight: '700',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  backButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: dark.surfaceElevated,
-    borderWidth: 1,
-    borderColor: dark.border,
-  },
-  nextButton: {
-    flex: 1,
-    height: 52,
-    borderRadius: 999,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  disabledButton: {
-    opacity: 0.4,
-  },
-  photoActionButton: {
-    minHeight: 40,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: dark.border,
-    backgroundColor: dark.surfaceElevated,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-  },
-  removePhotoButton: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: 'rgba(11,11,13,0.7)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addPhotoTile: {
-    width: 76,
-    height: 76,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: dark.border,
-    backgroundColor: dark.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  locationButton: {
-    minHeight: 52,
-    borderRadius: 999,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-});
