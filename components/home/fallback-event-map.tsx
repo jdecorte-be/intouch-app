@@ -93,7 +93,7 @@ export function FallbackEventMap({
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
   // Pins outside the active category chip are excluded entirely, matching
   // the Mapbox map's behavior. Groups stay on the map regardless of
-  // category — the chip only filters events.
+  // category, the chip only filters events.
   const renderedEvents = useMemo(
     () =>
       activeCategory && activeCategory !== 'featured'

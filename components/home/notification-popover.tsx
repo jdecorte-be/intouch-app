@@ -91,7 +91,7 @@ export function NotificationPopover({ visible, onClose, onOpenEvent }: Notificat
     }
 
     if (translateY.value <= hiddenTranslateY + 1) {
-      // A drag-to-close gesture already animated the panel off-screen — don't replay the close animation.
+      // A drag-to-close gesture already animated the panel off-screen, don't replay the close animation.
       setIsMounted(false);
       return;
     }

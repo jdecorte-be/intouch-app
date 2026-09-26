@@ -44,7 +44,7 @@ export function MapboxEventMap({
   const webViewRef = useRef<WebView>(null);
   // Captured once on mount: the map's HTML must stay referentially stable
   // across re-renders, or the WebView fully reloads (Mapbox reinitializes,
-  // tiles refetch, camera resets) every time `events` changes — e.g. on
+  // tiles refetch, camera resets) every time `events` changes, e.g. on
   // every category filter tap. Later event-list updates go through
   // sendEventsUpdate below instead, into the already-running map.
   const initialEventsRef = useRef(events);
@@ -112,11 +112,11 @@ export function MapboxEventMap({
   const handleMessage = (message: WebViewMessageEvent) => {
     const data = parseMapMessage(message.nativeEvent.data);
 
-    if (data?.type === 'retalk-map-event-select' && data.eventId) {
+    if (data?.type === 'intouch-map-event-select' && data.eventId) {
       onSelectEvent(data.eventId);
     }
 
-    if (data?.type === 'retalk-map-visible-events' && data.eventIds) {
+    if (data?.type === 'intouch-map-visible-events' && data.eventIds) {
       onVisibleEventIdsChange?.(data.eventIds);
     }
   };
@@ -124,7 +124,7 @@ export function MapboxEventMap({
   return (
     <WebView
       ref={webViewRef}
-      key="retalk-mapbox-map"
+      key="intouch-mapbox-map"
       allowsInlineMediaPlayback
       javaScriptEnabled
       onLoadEnd={() => {

@@ -55,7 +55,7 @@ export function MapboxEventMap({
   // Captured once on mount: the map's HTML/srcDoc must stay referentially
   // stable across re-renders, or the iframe fully reloads (Mapbox
   // reinitializes, tiles refetch, camera resets) every time `events`
-  // changes — e.g. on every category filter tap. Later event-list updates
+  // changes, e.g. on every category filter tap. Later event-list updates
   // go through sendEventsUpdate below instead, into the already-running map.
   const initialEventsRef = useRef(events);
   const html = useMemo(() => createMapboxMapHtml(initialEventsRef.current), []);
@@ -71,7 +71,7 @@ export function MapboxEventMap({
 
   const sendEventsUpdate = useCallback((nextEvents: EventMapItem[]) => {
     postMapMessage(frameRef.current?.contentWindow, {
-      type: 'retalk-map-update-events',
+      type: 'intouch-map-update-events',
       events: nextEvents.map(toMapEvent),
     });
   }, []);
@@ -82,7 +82,7 @@ export function MapboxEventMap({
 
   useEffect(() => {
     postMapMessage(frameRef.current?.contentWindow, {
-      type: 'retalk-map-set-active-category',
+      type: 'intouch-map-set-active-category',
       category: activeCategory ?? 'featured',
     });
   }, [activeCategory]);
@@ -95,11 +95,11 @@ export function MapboxEventMap({
 
       const data = parseMapMessage(message.data);
 
-      if (data?.type === 'retalk-map-event-select' && data.eventId) {
+      if (data?.type === 'intouch-map-event-select' && data.eventId) {
         onSelectEvent(data.eventId);
       }
 
-      if (data?.type === 'retalk-map-visible-events' && data.eventIds) {
+      if (data?.type === 'intouch-map-visible-events' && data.eventIds) {
         onVisibleEventIdsChange?.(data.eventIds);
       }
     };
@@ -136,7 +136,7 @@ export function MapboxEventMap({
       onLoad={() => {
         sendEventsUpdate(events);
         postMapMessage(frameRef.current?.contentWindow, {
-          type: 'retalk-map-set-active-category',
+          type: 'intouch-map-set-active-category',
           category: activeCategory ?? 'featured',
         });
 
