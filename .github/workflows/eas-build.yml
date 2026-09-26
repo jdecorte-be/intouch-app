@@ -24,6 +24,9 @@ jobs:
     needs: check
     name: Build android app on EAS
     runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://expo.dev/accounts/jdecorte/projects/intouch/builds
     steps:
       - name: Check for EXPO_TOKEN
         run: |
@@ -41,13 +44,10 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Setup EAS
-        uses: expo/expo-github-action@v8
-        with:
-          token: ${{ secrets.EXPO_TOKEN }}
-
       - name: Install dependencies
         run: npm ci
 
       - name: Build android app on EAS
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: npx --yes eas-cli@latest build --platform android --profile production --non-interactive --no-wait
