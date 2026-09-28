@@ -1,4 +1,4 @@
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Pressable, StyleSheet } from 'react-native';
